@@ -1,19 +1,18 @@
 <script setup lang="ts">
 import { ref, shallowRef, watch, onBeforeUnmount } from 'vue'
-import { TresCanvas, useLoop } from '@tresjs/core'
-import { TextureLoader, type Texture, type Mesh } from 'three'
+import { TresCanvas } from '@tresjs/core'
+import { TextureLoader, type Texture } from 'three'
+import PosterMesh from './PosterMesh.vue'
 
 const props = defineProps<{
   posterUrl: string | null
   title: string
 }>()
 
-const meshRef = shallowRef<Mesh | null>(null)
 const texture = shallowRef<Texture | null>(null)
 const isHovering = ref(false)
 const mouseX = ref(0)
 const mouseY = ref(0)
-let elapsed = 0
 
 watch(
   () => props.posterUrl,
@@ -41,24 +40,6 @@ onBeforeUnmount(() => {
   texture.value?.dispose()
 })
 
-const { onBeforeRender } = useLoop()
-onBeforeRender(({ delta }: { delta: number; elapsed: number }) => {
-  const mesh = meshRef.value
-  if (!mesh) return
-  elapsed += delta
-
-  if (isHovering.value) {
-    const targetY = mouseX.value * 0.4
-    const targetX = -mouseY.value * 0.25
-    mesh.rotation.y += (targetY - mesh.rotation.y) * 0.12
-    mesh.rotation.x += (targetX - mesh.rotation.x) * 0.12
-  } else {
-    const targetY = Math.sin(elapsed * 0.9) * 0.09
-    mesh.rotation.y += (targetY - mesh.rotation.y) * 0.04
-    mesh.rotation.x += (0 - mesh.rotation.x) * 0.04
-  }
-})
-
 function handleMouseMove(e: MouseEvent) {
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
   mouseX.value = ((e.clientX - rect.left) / rect.width) * 2 - 1
@@ -75,11 +56,12 @@ function handleMouseMove(e: MouseEvent) {
   >
     <TresCanvas v-if="posterUrl" :alpha="true" :antialias="true" :clear-color="'#00000000'">
       <TresPerspectiveCamera :position="[0, 0, 4]" :fov="50" />
-      <TresMesh ref="meshRef">
-        <TresPlaneGeometry :args="[2, 3]" />
-        <TresMeshBasicMaterial v-if="texture" :map="texture" :transparent="true" />
-        <TresMeshBasicMaterial v-else :color="'#e5e5e5'" />
-      </TresMesh>
+      <PosterMesh
+        :texture="texture"
+        :is-hovering="isHovering"
+        :mouse-x="mouseX"
+        :mouse-y="mouseY"
+      />
     </TresCanvas>
     <div
       v-else

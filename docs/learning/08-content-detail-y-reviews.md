@@ -178,7 +178,44 @@ clásicos (`Mesh`, `PerspectiveCamera`, `PlaneGeometry`) tienen un
 componente Vue equivalente con prefijo `Tres`: `<TresMesh>`,
 `<TresPerspectiveCamera>`, `<TresPlaneGeometry>`.
 
-### 4.2 · Estructura mínima de `PosterScene.vue`
+### 4.2 · Gotcha clave: `useLoop` solo dentro del canvas
+
+Antes de la estructura, una regla que rompe la primera vez que la
+ignorás: **los composables como `useLoop()`, `useTres()`,
+`useTresContext()` solo funcionan en componentes hijos de
+`<TresCanvas>`.** Si los llamás en el mismo `<script setup>` que monta
+el `<TresCanvas>`, vas a ver este error en consola y la página queda
+en blanco:
+
+```
+useTresContext must be used together with useTresContextProvider.
+You probably tried to use it above or on the same level as a TresCanvas
+component. It should be used in child components of a TresCanvas instance.
+```
+
+**Por qué pasa:** `<TresCanvas>` instala el contexto de Tres en su
+slot por debajo. El `<script setup>` del componente padre corre antes
+de mounting children, entonces no hay contexto disponible.
+
+**Solución estándar:** dividir en dos componentes. El padre
+(`PosterScene`) maneja el DOM wrapper, listeners del mouse y carga de
+textura. Un hijo (`PosterMesh`) vive dentro de `<TresCanvas>` y es
+quien llama `useLoop()`.
+
+```
+PosterScene.vue
+└─ <div @mousemove ...>
+   └─ <TresCanvas>
+      └─ <PosterMesh :texture :isHovering :mouseX :mouseY />
+         └─ <TresMesh ref="meshRef">         ← acá sí useLoop()
+            ├─ <TresPlaneGeometry />
+            └─ <TresMeshBasicMaterial :map />
+```
+
+El estado (texture, hover, mouse) baja por props. Las animaciones
+viven en el hijo donde sí hay contexto.
+
+### 4.3 · Estructura mínima del canvas (en `PosterScene.vue`)
 
 ```vue
 <TresCanvas :alpha="true" :antialias="true">
@@ -204,7 +241,7 @@ Línea por línea:
 - `<TresMeshBasicMaterial :map="texture">` — el material más barato
   (no necesita luces, no calcula sombras). El `map` es la textura.
 
-### 4.3 · Cargar la textura desde URL
+### 4.4 · Cargar la textura desde URL (en `PosterScene.vue`)
 
 `useTexture` de TresJS necesita Suspense. Para mantenerlo simple
 usamos el loader manual de Three:
@@ -247,7 +284,7 @@ libera.
 usar imágenes de otro origen como textura ("tainted canvas"). El
 servidor del poster tiene que mandar `Access-Control-Allow-Origin`.
 
-### 4.4 · El loop de animación: idle wobble + magnetic hover
+### 4.5 · El loop de animación: idle wobble + magnetic hover (en `PosterMesh.vue`)
 
 Queremos dos comportamientos:
 
@@ -293,7 +330,7 @@ frame anterior. Multiplicarlo por la frecuencia (`* 0.9`) hace que la
 oscilación tenga la misma velocidad en una pantalla 60Hz o 144Hz. Si
 contás frames, los monitores rápidos animan demasiado rápido.
 
-### 4.5 · Captura del mouse
+### 4.6 · Captura del mouse (en `PosterScene.vue`)
 
 El listener va en el contenedor `<div>` (no en el `<canvas>`, así
 funciona aunque el canvas no haya inicializado todavía):
@@ -309,7 +346,7 @@ function handleMouseMove(e: MouseEvent) {
 Normalizamos a `[-1, 1]` (clip space) — más fácil de multiplicar por
 factores de rotación que píxeles crudos.
 
-### 4.6 · Fallback gracioso
+### 4.7 · Fallback gracioso
 
 Si `posterUrl === null` (varios seeds del backend lo tienen), no
 montamos `<TresCanvas>` en absoluto. Mostramos un div placeholder con
