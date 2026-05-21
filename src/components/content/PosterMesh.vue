@@ -35,7 +35,11 @@ onBeforeRender(({ delta }: { delta: number; elapsed: number }) => {
 <template>
   <TresMesh ref="meshRef">
     <TresPlaneGeometry :args="[2, 3]" />
-    <TresMeshBasicMaterial v-if="texture" :map="texture" :transparent="true" />
-    <TresMeshBasicMaterial v-else :color="'#e5e5e5'" />
+    <TresMeshBasicMaterial
+      :key="texture ? 'tex' : 'fallback'"
+      :map="texture"
+      :color="texture ? 0xb8b8b8 : 0x2a2a2a"
+      :transparent="true"
+    />
   </TresMesh>
 </template>

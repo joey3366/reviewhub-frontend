@@ -6,8 +6,9 @@ const props = withDefaults(
     value: number | null
     size?: 'sm' | 'md' | 'lg'
     showNumber?: boolean
+    theme?: 'light' | 'dark'
   }>(),
-  { size: 'md', showNumber: true }
+  { size: 'md', showNumber: true, theme: 'light' }
 )
 
 const filledStars = computed(() => {
@@ -25,6 +26,21 @@ const sizeClasses = computed(() => {
       return { star: 'text-sm', number: 'text-sm font-medium' }
   }
 })
+
+const colors = computed(() => {
+  if (props.theme === 'dark') {
+    return {
+      filled: 'text-amber-400',
+      empty: 'text-white/20',
+      number: props.value === null ? 'text-white/40' : 'text-white',
+    }
+  }
+  return {
+    filled: 'text-ink',
+    empty: 'text-ink-subtle/40',
+    number: props.value === null ? 'text-ink-subtle' : 'text-ink',
+  }
+})
 </script>
 
 <template>
@@ -33,14 +49,11 @@ const sizeClasses = computed(() => {
       <span
         v-for="i in 5"
         :key="i"
-        :class="i <= filledStars ? 'text-ink' : 'text-ink-subtle/40'"
+        :class="i <= filledStars ? colors.filled : colors.empty"
         aria-hidden="true"
       >★</span>
     </div>
-    <span
-      v-if="showNumber"
-      :class="[sizeClasses.number, value === null ? 'text-ink-subtle' : 'text-ink']"
-    >
+    <span :class="[sizeClasses.number, colors.number]" v-if="showNumber">
       {{ value !== null ? `${value}/10` : 'Sin calificar' }}
     </span>
   </div>

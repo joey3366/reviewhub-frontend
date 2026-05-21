@@ -49,7 +49,7 @@ function handleMouseMove(e: MouseEvent) {
 
 <template>
   <div
-    class="relative aspect-[2/3] w-full overflow-hidden rounded-md border border-outline bg-surface-muted"
+    class="relative aspect-[2/3] w-full overflow-hidden rounded-lg border border-white/10 bg-white/5"
     @mouseenter="isHovering = true"
     @mouseleave="isHovering = false"
     @mousemove="handleMouseMove"
@@ -67,8 +67,8 @@ function handleMouseMove(e: MouseEvent) {
       v-else
       class="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center"
     >
-      <span class="text-xs uppercase tracking-wide text-ink-subtle">Sin poster</span>
-      <span class="line-clamp-3 text-sm font-medium text-ink-muted">{{ title }}</span>
+      <span class="text-xs uppercase tracking-wide text-white/40">Sin poster</span>
+      <span class="line-clamp-3 text-sm font-medium text-white/70">{{ title }}</span>
     </div>
   </div>
 </template>
