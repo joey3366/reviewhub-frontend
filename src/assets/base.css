@@ -15,6 +15,11 @@
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
 
+  html.full-bleed,
+  html.full-bleed body {
+    background-color: #000;
+  }
+
   *,
   *::before,
   *::after {
