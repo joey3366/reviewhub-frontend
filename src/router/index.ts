@@ -19,6 +19,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/SignupPage.vue'),
     meta: { guest: true },
   },
+  {
+    path: '/contents/:slug',
+    name: 'content-detail',
+    component: () => import('@/pages/ContentDetailPage.vue'),
+  },
 ]
 
 const router = createRouter({

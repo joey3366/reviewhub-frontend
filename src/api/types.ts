@@ -59,3 +59,20 @@ export interface Content {
   }
   createdAt: string
 }
+
+export interface ReviewAuthor {
+  id: string
+  fullName: string | null
+  initials: string
+}
+
+export interface Review {
+  id: string
+  contentId: string
+  rating: number
+  title: string
+  body: string
+  createdAt: string
+  updatedAt: string | null
+  user?: ReviewAuthor
+}
