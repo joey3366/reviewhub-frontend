@@ -97,16 +97,8 @@ function goHome() {
 </script>
 
 <template>
-  <div class="relative bg-black text-white">
-    <button
-      type="button"
-      class="absolute left-6 top-20 z-20 flex items-center gap-2 text-sm font-medium text-white/70 transition-colors hover:text-white md:left-10 md:top-24"
-      @click="goHome"
-    >
-      <span aria-hidden="true">←</span> Volver
-    </button>
-
-    <div v-if="loading" class="flex min-h-[640px] flex-col gap-8 px-6 py-16 md:flex-row md:gap-12 md:px-12">
+  <div class="relative min-h-[calc(100vh-3.5rem)] bg-black text-white">
+    <div v-if="loading" class="mx-auto flex min-h-[640px] max-w-7xl flex-col gap-8 px-6 py-16 md:flex-row md:gap-12">
       <div class="aspect-[2/3] w-full max-w-[280px] flex-none animate-pulse rounded-lg bg-white/5 self-center md:self-start" />
       <div class="flex flex-1 flex-col gap-4">
         <div class="h-3 w-24 animate-pulse rounded bg-white/10" />
