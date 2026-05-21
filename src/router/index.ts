@@ -23,6 +23,7 @@ const routes: RouteRecordRaw[] = [
     path: '/contents/:slug',
     name: 'content-detail',
     component: () => import('@/pages/ContentDetailPage.vue'),
+    meta: { fullBleed: true },
   },
 ]
 

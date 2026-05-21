@@ -97,7 +97,7 @@ function goHome() {
 </script>
 
 <template>
-  <div class="-mx-6 -my-10 bg-black text-white">
+  <div class="relative bg-black text-white">
     <button
       type="button"
       class="absolute left-6 top-20 z-20 flex items-center gap-2 text-sm font-medium text-white/70 transition-colors hover:text-white md:left-10 md:top-24"
