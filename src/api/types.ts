@@ -23,7 +23,7 @@ export interface PaginationMeta {
 
 export interface Paginated<T> {
   data: T[]
-  meta: PaginationMeta
+  metadata: PaginationMeta
 }
 
 export interface Genre {

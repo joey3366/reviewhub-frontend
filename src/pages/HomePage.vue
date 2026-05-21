@@ -31,7 +31,7 @@ async function loadContents() {
       genre: selectedGenre.value ?? undefined,
     })
     contents.value = result.data
-    meta.value = result.meta
+    meta.value = result.metadata
   } catch (e) {
     error.value = 'No pudimos cargar el catálogo. Asegurate que el backend esté corriendo en localhost:3333.'
     console.error(e)
