@@ -1,14 +1,14 @@
-# 08 — Content detail page + reviews lectura + poster 3D
+# 08 — Content detail page cinemática + reviews lectura
 
 > **Pre-requisitos:** docs 01-07. Tenés el catálogo funcionando con
 > filtros, sort y paginación; el cliente HTTP + interceptor; el router
 > con guards; las pages de auth.
 >
-> **Objetivo:** convertir el `click en card` (que hoy lleva a
-> `/contents/:slug` y queda en blanco) en una página completa con tres
-> partes: un **hero con el poster renderizado en 3D**, los metadatos
-> del contenido, y un **listado de reseñas paginado**. El form para
-> crear/editar reseñas queda para el doc 09.
+> **Objetivo:** convertir el `click en card` (que llevaba a
+> `/contents/:slug` y quedaba en blanco) en una página completa,
+> oscura y cinematográfica con tres partes: un **hero con backdrop
+> animado**, el bloque de **metadatos** y un **listado de reseñas**
+> paginado. El form para crear/editar reseñas queda para el doc 09.
 
 Al terminar este doc vas a entender:
 
@@ -17,15 +17,25 @@ Al terminar este doc vas a entender:
   `loading/error/content` independiente.
 - Cómo leer un **route param dinámico** (`:slug`) y reaccionar cuando
   cambia (navegación entre dos detail pages distintas sin recargar).
-- Las cuatro piezas mínimas de una escena **TresJS / Three.js**:
-  canvas + cámara + mesh (geometría + material) + loop de animación.
-- Cómo cargar una **textura desde URL** con `TextureLoader` sin
-  reventar la página si la imagen no existe.
-- El truco de **lerp damping** para animaciones que se sienten "vivas"
-  pero no estridentes.
-- Por qué la separación `PosterScene → ContentDetailHeader →
-  ContentDetailPage` es importante (cada nivel tiene una sola
-  responsabilidad).
+- Cómo declarar **rutas full-bleed** (que escapan del container
+  global) usando `route.meta` y reaccionar desde `App.vue`.
+- Cómo armar un **hero cinematográfico** sólo con CSS:
+  `background-image` + gradientes de máscara + animación Ken Burns +
+  parallax al scroll.
+- El truco del **stagger fade-in** con `animation-delay` para que la
+  metadata aparezca escalonada.
+- Por qué el **rubber-band scroll** muestra el fondo del `<body>` y
+  cómo pintarlo del color correcto solo en rutas específicas.
+- Por qué necesitamos un **proxy de imágenes** (`images.weserv.nl`)
+  para evitar problemas de CORS con backdrops/posters de terceros.
+
+> **Nota histórica:** la primera iteración usaba TresJS / Three.js
+> para renderizar el poster como un plano 3D con rotación y
+> mouse-follow. Quedó lindo técnicamente pero pesaba 800KB+ y no se
+> alineaba con el look editorial cinemático que terminamos eligiendo.
+> Lo desarmamos pero dejé el aprendizaje en el **Apéndice A** al
+> final — sirve para entender cómo se mete WebGL en una app Vue si
+> en el futuro querés volver al ruedo.
 
 ---
 
@@ -36,7 +46,7 @@ porque carga un solo recurso (`GET /contents`). La ContentDetailPage
 necesita **dos recursos independientes**:
 
 1. `GET /contents/:slug` → el contenido en sí (título, sinopsis,
-   poster, etc.)
+   poster, backdrop, géneros…).
 2. `GET /contents/:slug/reviews` → las reseñas, paginadas y ordenadas.
 
 **¿Por qué no un solo loading?** Porque la UX colapsa si esperás todo
@@ -81,11 +91,6 @@ export interface Review {
 }
 ```
 
-**Por qué `user` es opcional:** el endpoint `GET /contents/:slug/reviews`
-embebe el author, pero un `POST /reviews` solo devuelve la review nueva.
-Marcamos `user?` para que TypeScript te obligue a chequear antes de
-acceder.
-
 ### 2.2 · Nuevo módulo `reviewsApi`
 
 `src/api/reviews.ts`:
@@ -111,21 +116,24 @@ export const reviewsApi = {
 }
 ```
 
-**Mismo patrón que `contentApi`:** thin wrapper, devuelve `data` ya
-desempaquetado. Si después agregamos `create`, `update`, `destroy`,
-crecen como métodos del mismo objeto.
+Mismo patrón que `contentApi`. Si después agregamos `create`,
+`update`, `destroy`, crecen como métodos del mismo objeto (eso es el
+doc 09).
 
 ---
 
-## 3 · `RatingStars` (display) y `ReviewItem`
+## 3 · `RatingStars` y `ReviewItem` con variantes de tema
 
-Antes de armar la page necesitamos las piezas atómicas.
+Antes de armar el hero necesitamos las piezas atómicas. Como la
+detail page es oscura pero el resto del sitio es claro, los
+componentes que se usan en ambos lados aceptan una prop
+`theme?: 'light' | 'dark'` con default `'light'`.
 
-### 3.1 · `RatingStars` en modo display
+### 3.1 · `RatingStars`
 
 El backend devuelve `rating: 1-10`, pero visualmente queremos
-**5 estrellas** (el doble es más fácil de mapear mentalmente: 8/10
-= 4 estrellas rellenas).
+**5 estrellas** (es más fácil de mapear: 8/10 = 4 estrellas
+rellenas).
 
 ```ts
 const filledStars = computed(() => {
@@ -134,253 +142,329 @@ const filledStars = computed(() => {
 })
 ```
 
-**Tres tamaños** (`sm` / `md` / `lg`) controlados por una sola prop, y
-un opt-out del número (`showNumber={false}`) para casos como cards muy
-chicas. Para `value === null` mostramos "Sin calificar" — un estado
-visible es mejor que un componente vacío.
-
-### 3.2 · `ReviewItem`
-
-Una card con:
-
-- **Avatar de iniciales** (mismo patrón que el NavBar — usamos el
-  campo `user.initials` que el backend ya nos da pre-computado).
-- Nombre + fecha (`toLocaleDateString('es-AR')`).
-- Marca `· editada` si `updatedAt !== createdAt`.
-- Título + cuerpo (`whitespace-pre-line` para respetar saltos de
-  línea del usuario).
-- Rating en la esquina superior derecha (size `sm`).
-
-**Estructura:** `<article>` (semántico — cada review es un contenido
-autocontenido). Borde 1px + radius 8px, fiel al canon del doc 02.
-
----
-
-## 4 · El hero 3D — TresJS desde cero
-
-Este es el punto novedoso del doc. Si nunca tocaste WebGL/Three.js,
-acá hay 5 conceptos en 60 líneas.
-
-### 4.1 · Las cuatro piezas mínimas de una escena 3D
-
-Toda escena 3D — sin importar la librería — necesita:
-
-1. **Canvas/Renderer:** el `<canvas>` HTML donde WebGL dibuja.
-2. **Cámara:** desde dónde se mira la escena. Posición + tipo
-   (perspective vs orthographic) + FOV.
-3. **Mesh:** un objeto. Un mesh = geometría (forma) + material
-   (cómo se ve la superficie).
-4. **Loop de animación:** algo que se ejecute en cada frame
-   (`requestAnimationFrame`) para mover/rotar/escalar los meshes.
-
-TresJS abstrae todo esto en componentes Vue. Los nombres de Three.js
-clásicos (`Mesh`, `PerspectiveCamera`, `PlaneGeometry`) tienen un
-componente Vue equivalente con prefijo `Tres`: `<TresMesh>`,
-`<TresPerspectiveCamera>`, `<TresPlaneGeometry>`.
-
-### 4.2 · Gotcha clave: `useLoop` solo dentro del canvas
-
-Antes de la estructura, una regla que rompe la primera vez que la
-ignorás: **los composables como `useLoop()`, `useTres()`,
-`useTresContext()` solo funcionan en componentes hijos de
-`<TresCanvas>`.** Si los llamás en el mismo `<script setup>` que monta
-el `<TresCanvas>`, vas a ver este error en consola y la página queda
-en blanco:
-
-```
-useTresContext must be used together with useTresContextProvider.
-You probably tried to use it above or on the same level as a TresCanvas
-component. It should be used in child components of a TresCanvas instance.
-```
-
-**Por qué pasa:** `<TresCanvas>` instala el contexto de Tres en su
-slot por debajo. El `<script setup>` del componente padre corre antes
-de mounting children, entonces no hay contexto disponible.
-
-**Solución estándar:** dividir en dos componentes. El padre
-(`PosterScene`) maneja el DOM wrapper, listeners del mouse y carga de
-textura. Un hijo (`PosterMesh`) vive dentro de `<TresCanvas>` y es
-quien llama `useLoop()`.
-
-```
-PosterScene.vue
-└─ <div @mousemove ...>
-   └─ <TresCanvas>
-      └─ <PosterMesh :texture :isHovering :mouseX :mouseY />
-         └─ <TresMesh ref="meshRef">         ← acá sí useLoop()
-            ├─ <TresPlaneGeometry />
-            └─ <TresMeshBasicMaterial :map />
-```
-
-El estado (texture, hover, mouse) baja por props. Las animaciones
-viven en el hijo donde sí hay contexto.
-
-### 4.3 · Estructura mínima del canvas (en `PosterScene.vue`)
-
-```vue
-<TresCanvas :alpha="true" :antialias="true">
-  <TresPerspectiveCamera :position="[0, 0, 4]" :fov="50" />
-  <TresMesh ref="meshRef">
-    <TresPlaneGeometry :args="[2, 3]" />
-    <TresMeshBasicMaterial :map="texture" :transparent="true" />
-  </TresMesh>
-</TresCanvas>
-```
-
-Línea por línea:
-
-- `<TresCanvas :alpha="true">` — el canvas, con fondo transparente
-  para que respete el `bg-surface` del componente padre. `antialias`
-  suaviza los bordes del plano.
-- `<TresPerspectiveCamera :position="[0, 0, 4]" :fov="50">` — cámara
-  4 unidades hacia atrás en el eje Z, mirando al origen. FOV 50° es
-  un valor "humano" (no fisheye, no telephoto).
-- `<TresPlaneGeometry :args="[2, 3]">` — un rectángulo de 2×3 unidades
-  (relación 2:3, idéntica a un poster). `:args` se pasan al constructor
-  de `PlaneGeometry` de Three.js tal cual.
-- `<TresMeshBasicMaterial :map="texture">` — el material más barato
-  (no necesita luces, no calcula sombras). El `map` es la textura.
-
-### 4.4 · Cargar la textura desde URL (en `PosterScene.vue`)
-
-`useTexture` de TresJS necesita Suspense. Para mantenerlo simple
-usamos el loader manual de Three:
+Los colores se derivan del tema:
 
 ```ts
-import { TextureLoader, type Texture } from 'three'
-import { shallowRef, watch } from 'vue'
-
-const texture = shallowRef<Texture | null>(null)
-
-watch(
-  () => props.posterUrl,
-  (url) => {
-    texture.value?.dispose()
-    texture.value = null
-    if (!url) return
-    const loader = new TextureLoader()
-    loader.setCrossOrigin('anonymous')
-    loader.load(
-      url,
-      (tex) => { texture.value = tex },
-      undefined,
-      () => { texture.value = null }   // onError: silenciosamente al fallback
-    )
-  },
-  { immediate: true }
-)
-```
-
-**Por qué `shallowRef` y no `ref`:** Three.js objects son enormes
-(tienen referencias circulares internas). Si los wrappeás con `ref`,
-Vue intenta hacerlos `reactive` profundamente y rompe Three. Con
-`shallowRef`, Vue trata el `.value` como inmutable opaque — perfecto.
-
-**Por qué el `dispose()`:** las texturas WebGL viven en memoria de GPU.
-Si cambiás de poster sin liberarlas, leak garantizado. `dispose()` lo
-libera.
-
-**Por qué `setCrossOrigin('anonymous')`:** sin esto, WebGL refusa
-usar imágenes de otro origen como textura ("tainted canvas"). El
-servidor del poster tiene que mandar `Access-Control-Allow-Origin`.
-
-### 4.5 · El loop de animación: idle wobble + magnetic hover (en `PosterMesh.vue`)
-
-Queremos dos comportamientos:
-
-- **Idle:** el poster oscila suavemente en Y (`sin(elapsed)`).
-- **Hover:** el poster sigue al mouse con un efecto "magnético"
-  (lerp damping).
-
-`useLoop` de TresJS te da hooks que corren cada frame. Usamos
-`onBeforeRender` para mover los meshes antes del próximo render:
-
-```ts
-import { useLoop } from '@tresjs/core'
-
-const { onBeforeRender } = useLoop()
-let elapsed = 0
-
-onBeforeRender(({ delta }: { delta: number; elapsed: number }) => {
-  const mesh = meshRef.value
-  if (!mesh) return
-  elapsed += delta
-
-  if (isHovering.value) {
-    const targetY = mouseX.value * 0.4       // mouseX normalizado [-1, 1]
-    const targetX = -mouseY.value * 0.25
-    mesh.rotation.y += (targetY - mesh.rotation.y) * 0.12
-    mesh.rotation.x += (targetX - mesh.rotation.x) * 0.12
-  } else {
-    const targetY = Math.sin(elapsed * 0.9) * 0.09
-    mesh.rotation.y += (targetY - mesh.rotation.y) * 0.04
-    mesh.rotation.x += (0 - mesh.rotation.x) * 0.04
+const colors = computed(() => {
+  if (props.theme === 'dark') {
+    return { filled: 'text-amber-400', empty: 'text-white/20', ... }
   }
+  return { filled: 'text-ink', empty: 'text-ink-subtle/40', ... }
 })
 ```
 
-**Qué es lerp damping:** en vez de saltar al target instantáneamente,
-movés un % de la distancia restante cada frame
-(`current += (target - current) * factor`). Factor bajo (0.04) = lento
-y suave, factor alto (0.12) = más responsivo. Es la base de cualquier
-animación que se sienta "natural" sin tweens manuales.
+Tres tamaños (`sm` / `md` / `lg`) y opt-out del número (`showNumber=false`).
 
-**Por qué `delta` y no contar frames:** `delta` es segundos desde el
-frame anterior. Multiplicarlo por la frecuencia (`* 0.9`) hace que la
-oscilación tenga la misma velocidad en una pantalla 60Hz o 144Hz. Si
-contás frames, los monitores rápidos animan demasiado rápido.
+### 3.2 · `ReviewItem`
 
-### 4.6 · Captura del mouse (en `PosterScene.vue`)
+Una `<article>` con avatar de iniciales, nombre del autor, fecha
+formateada en español (`toLocaleDateString('es-AR')`), marca
+`· editada` si `updatedAt !== createdAt`, título y body
+(`whitespace-pre-line` para respetar saltos del usuario), y el
+rating arriba a la derecha.
 
-El listener va en el contenedor `<div>` (no en el `<canvas>`, así
-funciona aunque el canvas no haya inicializado todavía):
+Igual que `RatingStars`, recibe `theme` y aplica clases distintas:
+fondo `bg-white/[0.03]` con borde `border-white/10` en dark, o
+`bg-surface` con `border-outline` en light.
+
+---
+
+## 4 · Full-bleed routes — escape del container global
+
+Antes de tocar el hero, hay un problema estructural. `App.vue` tiene
+siempre el mismo wrapper:
+
+```vue
+<main class="mx-auto max-w-7xl px-6 py-10">
+  <RouterView />
+</main>
+```
+
+Eso es perfecto para HomePage y demás (deja gutters laterales y un
+ancho máximo legible), pero para el hero cinemático queremos que el
+backdrop se vea **de borde a borde de la viewport** y sin padding.
+
+### 4.1 · Declarar la ruta como "full-bleed"
+
+En `router/index.ts` agregamos `meta`:
 
 ```ts
-function handleMouseMove(e: MouseEvent) {
-  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-  mouseX.value = ((e.clientX - rect.left) / rect.width) * 2 - 1
-  mouseY.value = ((e.clientY - rect.top) / rect.height) * 2 - 1
+{
+  path: '/contents/:slug',
+  name: 'content-detail',
+  component: () => import('@/pages/ContentDetailPage.vue'),
+  meta: { fullBleed: true },
 }
 ```
 
-Normalizamos a `[-1, 1]` (clip space) — más fácil de multiplicar por
-factores de rotación que píxeles crudos.
+### 4.2 · App.vue reacciona
 
-### 4.7 · Fallback gracioso
+```ts
+const route = useRoute()
+const isFullBleed = computed(() => route.meta.fullBleed === true)
 
-Si `posterUrl === null` (varios seeds del backend lo tienen), no
-montamos `<TresCanvas>` en absoluto. Mostramos un div placeholder con
-el título — más liviano y evita el flash de "cargando textura".
+watchEffect(() => {
+  document.documentElement.classList.toggle('full-bleed', isFullBleed.value)
+})
+```
 
 ```vue
-<TresCanvas v-if="posterUrl" :alpha="true"> ... </TresCanvas>
-<div v-else class="flex h-full w-full items-center justify-center ...">
-  <span class="text-xs uppercase ...">Sin poster</span>
-  <span>{{ title }}</span>
+<div :class="isFullBleed ? 'min-h-screen bg-black' : 'min-h-screen bg-surface'">
+  <NavBar />
+  <main :class="isFullBleed ? '' : 'mx-auto max-w-7xl px-6 py-10'">
+    <RouterView />
+  </main>
 </div>
 ```
 
+Tres cosas pasan al entrar a la ruta:
+
+1. El wrapper de `App.vue` se pinta de negro.
+2. El `<main>` pierde sus constraints (full-width, sin padding).
+3. La clase `.full-bleed` se agrega al `<html>` — esto se usa en CSS
+   global (ver §7 sobre overscroll).
+
+Al salir, todo vuelve. **Es declarativo: cualquier ruta futura puede
+optar-in con una sola línea de meta.**
+
+### 4.3 · NavBar adaptativo
+
+`NavBar.vue` también lee `route.meta.fullBleed` y aplica un set de
+clases distinto: fondo `bg-black/40 backdrop-blur-md` (en vez del
+blanco), texto blanco con hover `bg-white/10`, logo invertido. Toda
+la lógica de auth/links queda igual; solo cambia la paleta.
+
 ---
 
-## 5 · `ContentDetailHeader` — composición plana
+## 5 · El hero cinemático sin librerías 3D
 
-El header es solo layout: poster a la izquierda (en md+), bloque de
-metadatos a la derecha. Computeds para tres líneas derivadas:
+Es solo CSS bien armado. Tres capas apiladas con `absolute`:
 
-- `typeLabel` — `'Película'` vs `'Serie'`.
-- `metaLine` — concatena tipo, año, runtime/temporadas separados por
-  `·`. Usa los campos opcionales `content.movie?.runtimeMinutes` y
-  `content.series?.seasonsCount`.
-- `reviewCountLabel` — pluralización en español.
+```
+┌─ section (relative, min-h-[720px], overflow-hidden) ────┐
+│  ┌─ wrapper backdrop (absolute, inset-0) ──────────────┐│
+│  │  ┌─ image div (background-image, ken-burns anim) ──┐││
+│  │  │                                                 │││
+│  │  └─────────────────────────────────────────────────┘││
+│  │  ┌─ gradient L→R (from-black via-black/85) ────────┐││
+│  │  │                                                 │││
+│  │  └─────────────────────────────────────────────────┘││
+│  │  ┌─ gradient bottom (from-black to-transparent) ──┐││
+│  │  └─────────────────────────────────────────────────┘││
+│  └─────────────────────────────────────────────────────┘│
+│  ┌─ content (relative, max-w-7xl, mx-auto) ──────────┐ │
+│  │  [Volver]                                          │ │
+│  │  ┌─ Poster ─┐   ┌─ Metadata ──────────┐           │ │
+│  │  │          │   │ Year · Type · IMDb  │           │ │
+│  │  │  <img>   │   │ Title (huge)        │           │ │
+│  │  │          │   │ ★★★★★ · reseñas    │           │ │
+│  │  │          │   │ Chips de género     │           │ │
+│  │  │          │   │ Synopsis            │           │ │
+│  │  │          │   │ Director            │           │ │
+│  │  └──────────┘   └─────────────────────┘           │ │
+│  │  [Ver tráiler] [+ Mi lista] [Share]               │ │
+│  └────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+```
 
-Nada de lógica de negocio acá. Si después querés agregar un botón
-"trailer" o "agregar a watchlist", entra en este componente.
+### 5.1 · Backdrop como `background-image`
+
+```vue
+<div
+  v-if="content.backdropUrl"
+  class="ken-burns absolute inset-0 bg-cover bg-center"
+  :style="{ backgroundImage: `url(${content.backdropUrl})` }"
+/>
+```
+
+Si no hay `backdropUrl` (mucha data del seed lo tiene `null`),
+caemos en un fallback con `bg-gradient-to-br from-zinc-900 via-zinc-950 to-black`.
+
+### 5.2 · Tres gradientes apilados encima
+
+```vue
+<div class="absolute inset-0 bg-gradient-to-r from-black via-black/85 to-transparent" />
+<div class="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black to-transparent" />
+<div class="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/70 to-transparent" />
+```
+
+- El primero (L→R) hace legible el texto de la metadata sobre el
+  backdrop. Sin él la columna izquierda compite con la imagen.
+- El segundo (bottom) suaviza la transición a la sección de reseñas
+  abajo.
+- El tercero (top) le da peso al NavBar y evita que la imagen lo
+  "ataque".
+
+### 5.3 · Animación Ken Burns en CSS puro
+
+"Ken Burns" es el clásico zoom + pan lento que usan los documentales.
+13 líneas de keyframes:
+
+```css
+@keyframes kenBurns {
+  0%   { transform: scale(1.05) translate(0, 0); }
+  50%  { transform: scale(1.18) translate(-2%, -1.5%); }
+  100% { transform: scale(1.05) translate(0, 0); }
+}
+.ken-burns {
+  animation: kenBurns 32s ease-in-out infinite;
+  transform-origin: center;
+}
+```
+
+Ciclo de 32s — lento adrede. Si el ciclo fuera 8s, marearía.
+
+### 5.4 · Stagger fade-in con `animation-delay`
+
+```css
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+```
+
+Y en cada elemento del template asignamos un delay distinto:
+
+```vue
+<p class="fade-up" style="animation-delay: 60ms">{{ metaLine }}</p>
+<h1 class="fade-up" style="animation-delay: 120ms">{{ title }}</h1>
+<div class="fade-up" style="animation-delay: 240ms">stars</div>
+<div class="fade-up" style="animation-delay: 300ms">chips</div>
+<p class="fade-up" style="animation-delay: 360ms">{{ synopsis }}</p>
+```
+
+`backwards` en la animación es clave: hace que el estado inicial
+(opacity 0) se aplique antes de que arranque el delay, así no ves un
+flash del texto antes de empezar.
+
+### 5.5 · Parallax al scrollear
+
+```ts
+const backdropOffset = ref(0)
+
+function handleScroll() {
+  backdropOffset.value = window.scrollY * 0.35
+}
+
+onMounted(() => {
+  window.addEventListener('scroll', handleScroll, { passive: true })
+  handleScroll()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', handleScroll)
+})
+```
+
+```vue
+<div
+  class="absolute inset-0"
+  :style="{ transform: `translate3d(0, ${backdropOffset}px, 0)` }"
+>
+```
+
+El multiplicador `0.35` controla la intensidad — el backdrop se mueve
+35% de lo que se mueve la página. `passive: true` en el listener es
+importante: le dice al browser que no vas a hacer `preventDefault`, y
+el scroll se mantiene fluido. `translate3d` con z=0 fuerza GPU
+acceleration en la transformación.
+
+### 5.6 · Respect `prefers-reduced-motion`
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  .ken-burns,
+  .fade-up { animation: none; }
+}
+```
+
+User con preferencia "reduce motion" ve el hero estático. No es
+deal-breaker, es lo correcto.
 
 ---
 
-## 6 · `ContentDetailPage` — orquestación
+## 6 · Los botones de acción
 
-### 6.1 · Leer el slug y reaccionar al cambio
+Ver tráiler / Mi lista / Share son visuales por ahora (no hay backend
+para tráiler ni share, y "Mi lista" depende de watchlists que arman
+en Fase 3). Están `disabled` con `title="Próximamente"` para que se
+vean en su contexto. Tres patrones distintos:
+
+- **Botón círculo + label** (Ver tráiler): un `<span>` redondo con un
+  `<svg>` de triángulo play, seguido del texto. El hover scale-105
+  vive en el círculo, no en el label.
+- **Pill con icono** (+ Mi lista): pill grande con icono SVG plus +
+  texto.
+- **Icon-only círculo** (Share): solo `<svg>` adentro, sin label.
+
+Los SVG van inline con `viewBox` y `stroke="currentColor"` — así
+heredan el color del padre y no tenemos que instalar una librería
+de iconos para 3 íconos.
+
+---
+
+## 7 · El bug del overscroll blanco
+
+Cuando hacés trackpad pull o rubber-band scroll en la detail page,
+el browser "tira" el contenido y deja ver el fondo del `<body>`. Si
+ese fondo es blanco (`bg-surface`), aparecen franjas blancas a los
+costados que rompen la inmersión.
+
+Solución: pintamos el `<html>` y `<body>` de negro **solo** cuando
+estás en una ruta full-bleed. La clase `.full-bleed` se agrega al
+`<html>` desde `App.vue` (§4.2) y `base.css` hace el resto:
+
+```css
+@layer base {
+  html.full-bleed,
+  html.full-bleed body {
+    background-color: #000;
+  }
+}
+```
+
+Al salir de la ruta, la clase se saca y el body vuelve a `bg-surface`.
+
+**Por qué no `overscroll-behavior: none`:** funciona pero desactiva
+el bounce que algunos users encuentran natural. Pintar el body es
+menos invasivo.
+
+---
+
+## 8 · CORS para imágenes externas — `images.weserv.nl`
+
+Si pasás una URL de TMDB / IMDb / cualquier CDN externo al
+`backdrop` o `poster`, el browser puede o no aceptarla según los
+headers `Access-Control-Allow-Origin` que sirva. La realidad es que
+los CDNs grandes son inconsistentes (cache edge variable). Resultado:
+funciona en producción pero falla en dev, o al revés.
+
+**Solución pragmática:** envolvemos la URL externa en un proxy:
+
+```
+https://images.weserv.nl/?url=image.tmdb.org/t/p/w500/<id>.jpg
+```
+
+`images.weserv.nl` es un proxy gratuito que:
+
+- Re-sirve cualquier imagen pública con CORS `*` consistente.
+- Permite resize on-the-fly (`?w=500&h=750`).
+- Acepta el `url=` sin protocolo (formato corto).
+
+Para Fase 5 (admin) tenemos que decidir si:
+
+- El admin pega la URL ya wrappeada manualmente.
+- O el frontend envuelve automáticamente al guardar.
+
+Ver `docs/fase-0-verification-2026-05-20.md` para más contexto sobre
+de dónde salió este problema.
+
+---
+
+## 9 · `ContentDetailPage` — la orquestación
+
+### 9.1 · Leer el slug y reaccionar al cambio
 
 ```ts
 const route = useRoute()
@@ -399,21 +483,16 @@ el componente si solo cambia el param. Si vas de `/contents/inception`
 a `/contents/interstellar`, `onMounted` NO se vuelve a disparar. El
 `watch` sí.
 
-**Por qué resetar `reviewsPage` y `reviewsSort` al cambiar slug:**
-porque "estaba en page 3 ordenado por top" de una película es una
-preferencia local de esa página, no global. Cambiar de película debe
-empezar de cero.
-
-### 6.2 · Dos state machines, dos templates condicionados
+### 9.2 · Dos state machines, dos templates condicionados
 
 El template tiene tres ramas top-level:
 
 ```vue
-<div v-if="loading"> skeleton del header </div>
+<div v-if="loading"> skeleton dark </div>
 <div v-else-if="error"> mensaje + botón volver </div>
 <template v-else-if="content">
   <ContentDetailHeader :content />
-  <section> reseñas (con su propio loading/error/empty/content adentro) </section>
+  <section> reseñas (con su propio loading/error/empty/content) </section>
 </template>
 ```
 
@@ -421,110 +500,162 @@ Las reseñas tienen su `v-if/v-else-if/v-else` propio adentro del
 `<section>`. Esto permite que el header esté visible mientras las
 reseñas todavía cargan.
 
-### 6.3 · El CTA "Escribir reseña"
+### 9.3 · El CTA "Escribir reseña"
 
-Por ahora es un botón disabled con texto "(próximamente)". Solo se
-renderiza si `auth.isAuthenticated`. En el doc 09 le agregamos el
-form de verdad, pero dejarlo visible (aunque deshabilitado) le dice
-al user "esto va a estar acá pronto" en vez de aparecer mágicamente
-después.
-
-### 6.4 · Route en el router
-
-```ts
-{
-  path: '/contents/:slug',
-  name: 'content-detail',
-  component: () => import('@/pages/ContentDetailPage.vue'),
-}
-```
-
-Sin `meta` — la ruta es pública. El backend devuelve 404 si el slug
-no existe, y la page lo maneja con un mensaje claro.
+Botón disabled con texto "(próximamente)". Solo se renderiza si
+`auth.isAuthenticated`. En el doc 09 le agregamos el form de
+verdad, pero dejarlo visible (aunque deshabilitado) le dice al user
+"esto va a estar acá pronto".
 
 ---
 
-## 7 · Verificación
+## 10 · Verificación
 
 1. Click en cualquier card del home → URL cambia a
-   `/contents/<slug>` y aparece el detail.
-2. Si el contenido tiene poster (ninguno de los seeds actuales lo
-   tiene), el plano 3D se renderiza y oscila suavemente. Pasar el
-   mouse encima lo hace seguirte con damping.
-3. Sin poster, ves la card de fallback con el título centrado.
-4. La sección de reseñas carga en paralelo. Si hay reviews, listado
-   + paginación. Si no, empty state con prompt para login (si no
-   estás autenticado).
-5. Navegá entre dos detail pages distintas (botón atrás del browser o
-   click directo desde el home) — el contenido y las reseñas se
-   recargan, no quedan los de la página anterior.
-6. Si el slug no existe (URL inventada), aparece "No encontramos
-   este contenido" + botón "Volver al catálogo".
+   `/contents/<slug>` y aparece el detail dark cinemático.
+2. Para contenidos con backdrop seteado (Interstellar, Inception),
+   ves el fondo animado con Ken Burns y al scrollear se mueve
+   parallax.
+3. La metadata aparece con stagger sutil al cargar.
+4. Sin poster/backdrop, ves fallbacks limpios.
+5. Navegá entre dos detail pages distintas — el contenido y las
+   reseñas se recargan, no quedan los de la página anterior.
+6. Hacé pull con trackpad en cualquier dirección — todo negro, sin
+   blanco asomando.
+7. Click en "Volver" → vuelve al home (que sigue editorial light).
+8. Si tu OS tiene preferencia "reduce motion", el Ken Burns y los
+   stagger se desactivan.
 
 ---
 
-## 8 · Errores comunes
+## 11 · Errores comunes
 
-### "Mi 3D no aparece, solo veo el div gris"
+### "El backdrop no aparece, solo veo el gradiente fallback"
 
-- ¿`posterUrl` es null? Es esperado — fallback intencional.
-- ¿La URL es de otro origen sin CORS? Abrí DevTools → Console.
-  Vas a ver `Tainted canvas error`. El servidor del poster tiene
-  que mandar `Access-Control-Allow-Origin: *` o el origen del frontend.
-- ¿`<TresCanvas>` está dentro de un contenedor con `height: 0`?
-  El canvas hereda el tamaño del padre. Aseguráte de que el wrapper
-  tenga `aspect-[2/3]` o un alto explícito.
+- ¿`content.backdropUrl` es null? Es esperado — fallback intencional.
+- ¿La URL es de un CDN sin CORS? Wrappeala con `images.weserv.nl`
+  (ver §8).
+- ¿Estás haciendo HMR y solo cambiaste vite.config? Necesitás
+  restartear el dev server, HMR no lo agarra.
 
-### "El poster aparece pero no rota"
+### "Las animaciones se ven trabadas en mobile"
 
-- ¿`meshRef` está bien tipado y se asigna? Logueá `meshRef.value` en
-  el `onBeforeRender`. Si es `null`, el ref no se está bindeando —
-  chequeá que el `ref="meshRef"` esté en el `<TresMesh>` (no en un
-  `<TresMesh>` padre si estuvieras anidando).
-- ¿`useLoop` está importado de `@tresjs/core`? En TresJS v5 cambió de
-  nombre (antes era `useRenderLoop`) — si seguís docs viejos te vas
-  a confundir.
+- ¿Tenés `passive: true` en el listener de scroll? Sin él, el browser
+  asume que vas a `preventDefault()` y bloquea el scroll suave.
+- ¿Estás usando `translate3d` en vez de `translateY` para el parallax?
+  El 3d fuerza GPU acceleration.
 
-### "Vue dice que `<TresMesh>` es desconocido"
+### "Aparecen franjas blancas al overscroll"
 
-- Es un warning de TypeScript del IDE. TresJS provee la augmentación
-  de tipos automáticamente al instalarse. Si igual lo ves, agregá
-  `"types": ["@tresjs/core"]` al `compilerOptions` de `tsconfig.app.json`.
-- En runtime no rompe nada — Vue tiene un escape hatch para
-  componentes desconocidos.
+- Verificá que `.full-bleed` se esté agregando al `<html>`. Abrí
+  DevTools y mirá la clase del elemento root.
+- Verificá que `base.css` tenga la regla `html.full-bleed body`.
 
-### "Cambio de slug y el header de la página anterior queda visible un segundo"
+### "El NavBar queda blanco en la detail page"
 
-- Estás esperando a que cargue el nuevo `content` sin resetear el
-  anterior. Asegurate de hacer `content.value = null` al inicio de
-  `loadContent()`. Eso fuerza el branch del skeleton.
-
-### "El bundle creció mucho"
-
-- Three.js solo pesa ~600KB y TresJS le suma ~100KB. Si solo usás 3D
-  en una page, hacé import dinámico del componente:
-  `const PosterScene = defineAsyncComponent(() => import('@/components/content/PosterScene.vue'))`.
-  Así Three.js se descarga solo cuando entrás al detail.
+- `NavBar.vue` lee `route.meta.fullBleed` — verificá que la ruta
+  tenga `meta: { fullBleed: true }` en `router/index.ts`.
 
 ---
 
-## 9 · Recap
+## 12 · Recap
 
 - Una page con dos fetches debe tener dos state machines
   independientes — nunca un único `loading` global.
 - `watch(route.params...)` es necesario cuando navegás entre
   variantes de la misma ruta; `onMounted` solo dispara la primera vez.
-- TresJS te da componentes Vue para Three.js, pero el modelo mental
-  es el mismo: canvas → cámara → mesh (geometría + material) → loop.
-- `shallowRef` para objetos de Three. Nunca `ref` (rompe la
-  reactividad y la performance).
-- `delta` del render loop = base para cualquier animación
-  framerate-independent.
-- Lerp damping (`current += (target - current) * factor`) es la
-  fórmula más útil para que algo se sienta "vivo".
-- Fallback gracioso = no montar `<TresCanvas>` en absoluto cuando no
-  hay textura. Más simple que mostrar un canvas vacío.
+- `route.meta.fullBleed` es la forma declarativa de decir "esta ruta
+  rompe el container global". Cualquier futura ruta opt-in con una
+  línea.
+- Un hero cinemático no necesita WebGL — `background-image` +
+  gradientes + Ken Burns + parallax dan el 90% del efecto con 50
+  líneas de CSS.
+- `animation-delay` + `backwards` = stagger fade-in sin librerías
+  de animación.
+- El bug del overscroll blanco es real y se resuelve pintando el
+  `<body>` desde una clase global, no parcheando overflow.
+- Para imágenes externas, usá `images.weserv.nl` como proxy de CORS.
 
 **Próximo doc** — `09-reviews-crud.md`: el form para crear/editar/
 borrar reseñas (Fase 2 del plan), con manejo de 409 (duplicate review
 por user+content) y reuso de `extractFieldErrors` para los 422.
+
+---
+
+## Apéndice A — Lo que probamos con TresJS y por qué cambiamos
+
+La primera iteración de la detail page renderizaba el poster como un
+plano 3D con TresJS (wrapper Vue de Three.js). Idle wobble + magnetic
+hover. Quedó bien pero terminamos descartándolo. Vale la pena tenerlo
+documentado por dos razones: el aprendizaje sigue siendo útil si en
+el futuro querés meter 3D en otra parte, y los problemas que
+encontramos son los típicos que cualquiera se choca al arrancar.
+
+### A.1 · Cuándo conviene WebGL/Three.js en una app Vue
+
+- **Sí:** efectos no replicables con CSS (deformaciones de textura
+  reales, partículas físicas, escenas 3D verdaderas).
+- **No:** rotaciones planas, parallax, hover tilts — todo eso CSS lo
+  resuelve mejor y más liviano.
+
+Nosotros estábamos en el segundo grupo, ahí estaba el error de
+selección.
+
+### A.2 · Las cuatro piezas mínimas de una escena TresJS
+
+```vue
+<TresCanvas :alpha="true" :antialias="true">
+  <TresPerspectiveCamera :position="[0, 0, 4]" :fov="50" />
+  <TresMesh ref="meshRef">
+    <TresPlaneGeometry :args="[2, 3]" />
+    <TresMeshBasicMaterial :map="texture" :transparent="true" />
+  </TresMesh>
+</TresCanvas>
+```
+
+- Canvas → Cámara → Mesh (Geometría + Material) → loop de animación.
+
+### A.3 · Gotcha #1: `useLoop` solo dentro del canvas
+
+Si llamás `useLoop()` en el mismo `<script setup>` que monta
+`<TresCanvas>`, te explota con
+`useTresContext must be used together with useTresContextProvider`.
+
+Solución: dividir en dos componentes. El padre maneja el DOM +
+mouse + textura, el hijo (que sí está adentro de `<TresCanvas>`)
+llama `useLoop()`.
+
+### A.4 · Gotcha #2: `templateCompilerOptions` en `vite.config.ts`
+
+Sin esto, Vue trata los `<TresMesh>` y compañía como custom elements
+desconocidos y emite warnings + no renderiza:
+
+```ts
+import { templateCompilerOptions } from '@tresjs/core'
+
+export default defineConfig({
+  plugins: [vue({ ...templateCompilerOptions })],
+})
+```
+
+### A.5 · Gotcha #3: `shallowRef` para texturas
+
+Los objetos de Three son enormes y tienen referencias circulares.
+Si los wrappeás con `ref`, Vue intenta hacerlos reactive profundo y
+te rompe la performance. Siempre `shallowRef`.
+
+### A.6 · Por qué lo descartamos
+
+- **Bundle:** `three` + `@tresjs/core` agregan ~700KB al chunk del
+  detail. Tree-shaking ayuda poco porque son monolíticos.
+- **Estética:** el plano 3D oscilando se sentía "showcase-y", no
+  cinematográfico. Cuando comparamos contra el mockup definitivo
+  (poster flat con backdrop animado atrás) el 3D perdía por
+  irrelevante.
+- **Mantenimiento:** dos componentes (PosterScene + PosterMesh), un
+  watcher de textura, un loop con damping, un `dispose()` manual.
+  Mucho código para algo que CSS resuelve con un `<img>`.
+
+Si en el futuro querés meter 3D en otra parte (campo de estrellas
+animado, modelo 3D de un personaje, deformación de imagen), volvé
+a este apéndice — los tres gotchas siguen vigentes.

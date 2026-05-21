@@ -29,6 +29,7 @@ export const useAuthStore = defineStore('auth', {
         fullName,
       })
       this.setSession(token, user)
+      await this.refreshProfile()
     },
 
     async login(email: string, password: string) {
