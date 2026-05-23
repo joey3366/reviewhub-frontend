@@ -70,8 +70,8 @@ export interface Review {
   id: string
   contentId: string
   rating: number
-  title: string
-  body: string
+  title: string | null
+  body: string | null
   createdAt: string
   updatedAt: string | null
   user?: ReviewAuthor

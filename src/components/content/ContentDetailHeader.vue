@@ -1,10 +1,21 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import type { Content } from '@/api/types'
+import type { Content, Review } from '@/api/types'
 import RatingStars from './RatingStars.vue'
 
-const props = defineProps<{ content: Content }>()
+const props = withDefaults(
+  defineProps<{
+    content: Content
+    myReview?: Review | null
+    canQuickRate?: boolean
+  }>(),
+  { myReview: null, canQuickRate: false }
+)
+const emit = defineEmits<{
+  'quick-rate': [rating: number]
+  'edit-mine': []
+}>()
 const router = useRouter()
 
 const typeLabel = computed(() => (props.content.type === 'movie' ? 'Película' : 'Serie'))
@@ -26,12 +37,17 @@ const runtimeLabel = computed(() => {
 const director = computed(() => props.content.movie?.director ?? null)
 const reviewCountLabel = computed(() => {
   const count = props.content.reviewCount
-  return `${count} ${count === 1 ? 'reseña' : 'reseñas'}`
+  return `${count} ${count === 1 ? 'puntuación' : 'puntuaciones'}`
 })
 
 const ratingForBadge = computed(() => {
   if (props.content.avgRating === null) return null
   return props.content.avgRating.toFixed(1)
+})
+
+const hasWrittenReview = computed(() => {
+  const r = props.myReview
+  return Boolean(r && ((r.title && r.title.trim()) || (r.body && r.body.trim())))
 })
 
 const backdropOffset = ref(0)
@@ -108,20 +124,6 @@ function goBack() {
             <button
               type="button"
               disabled
-              class="group flex items-center gap-3 rounded-full text-sm font-medium text-white opacity-80 transition-opacity disabled:cursor-not-allowed"
-              title="Próximamente"
-            >
-              <span class="flex h-11 w-11 items-center justify-center rounded-full bg-white text-black transition-transform group-hover:scale-105">
-                <svg viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5 translate-x-0.5">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              </span>
-              Ver tráiler
-            </button>
-
-            <button
-              type="button"
-              disabled
               class="flex h-11 items-center gap-2 rounded-full border border-white/25 px-4 text-sm font-medium text-white opacity-80 transition-colors disabled:cursor-not-allowed hover:bg-white/10"
               title="Próximamente"
             >
@@ -129,21 +131,6 @@ function goBack() {
                 <path d="M12 5v14M5 12h14" />
               </svg>
               Mi lista
-            </button>
-
-            <button
-              type="button"
-              disabled
-              class="flex h-11 w-11 items-center justify-center rounded-full border border-white/25 text-white opacity-80 transition-colors disabled:cursor-not-allowed hover:bg-white/10"
-              title="Compartir"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-                <circle cx="18" cy="5" r="3" />
-                <circle cx="6" cy="12" r="3" />
-                <circle cx="18" cy="19" r="3" />
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-              </svg>
             </button>
           </div>
         </div>
@@ -176,8 +163,54 @@ function goBack() {
           </p>
 
           <div class="flex flex-wrap items-center gap-3 fade-up" style="animation-delay: 240ms">
-            <RatingStars :value="content.avgRating" size="lg" theme="dark" />
-            <span class="text-sm text-white/50">· {{ reviewCountLabel }}</span>
+            <!-- Logueado: una sola fila con estrellas editables (puntuar directo) -->
+            <template v-if="canQuickRate">
+              <span class="text-xs uppercase tracking-wider text-white/50">
+                {{ myReview ? 'Tu nota' : 'Calificá' }}
+              </span>
+              <RatingStars
+                :value="myReview ? myReview.rating : null"
+                :editable="true"
+                size="lg"
+                theme="dark"
+                :show-number="true"
+                @update:value="emit('quick-rate', $event)"
+              />
+              <button
+                v-if="myReview"
+                type="button"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-full text-amber-300 transition-colors hover:bg-amber-300/10 hover:text-amber-200"
+                :title="hasWrittenReview ? 'Editar reseña' : 'Escribir reseña'"
+                :aria-label="hasWrittenReview ? 'Editar reseña' : 'Escribir reseña'"
+                @click="emit('edit-mine')"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                </svg>
+              </button>
+            </template>
+
+            <!-- No logueado: promedio en modo lectura -->
+            <template v-else>
+              <RatingStars :value="content.avgRating" size="lg" theme="dark" />
+            </template>
+
+            <span class="inline-flex items-center gap-1.5 text-sm text-white/50">
+              <template v-if="ratingForBadge">
+                <svg
+                  class="avg-star h-4 w-4 flex-none text-amber-300"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path d="M12 2.6l2.6 5.86 6.4.55-4.85 4.2 1.45 6.23L12 16.95 5.95 19.44 7.4 13.21 2.55 9.01l6.4-.55z" />
+                </svg>
+                <span>{{ ratingForBadge }} prom.</span>
+                <span class="text-white/30">·</span>
+              </template>
+              <span>{{ reviewCountLabel }}</span>
+            </span>
           </div>
 
           <div v-if="content.genres.length" class="flex flex-wrap gap-2 fade-up" style="animation-delay: 300ms">
@@ -227,9 +260,27 @@ function goBack() {
   animation: fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
+@keyframes twinkle {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 0.8;
+    filter: drop-shadow(0 0 0 rgba(252, 211, 77, 0));
+  }
+  50% {
+    transform: scale(1.22) rotate(10deg);
+    opacity: 1;
+    filter: drop-shadow(0 0 6px rgba(252, 211, 77, 0.75));
+  }
+}
+.avg-star {
+  animation: twinkle 2.6s ease-in-out infinite;
+  transform-origin: center;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ken-burns,
-  .fade-up {
+  .fade-up,
+  .avg-star {
     animation: none;
   }
 }

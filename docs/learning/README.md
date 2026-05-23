@@ -30,6 +30,8 @@ tooling y UX que tomamos en el camino.
 | 05 | [Estado con Pinia](05-pinia-auth-store.md) | Pinia options API, state/getters/actions, persistencia con localStorage, evitar dependencias circulares con el cliente HTTP |
 | 06 | [Vue Router 4 y guards](06-router-y-guards.md) | Routes con lazy loading, `meta` flags, `beforeEach` para `guest` / `requiresAuth` / `requiresAdmin`, redirect query param |
 | 07 | [Pages y forms](07-pages-y-forms.md) | `HomePage` con loading/empty/error states; `LoginPage`/`SignupPage` con manejo de 422 field errors y 429 rate limit |
+| 08 | [Content detail + reviews (lectura)](08-content-detail-y-reviews.md) | Detail page cinemática: doble state machine, rutas full-bleed, hero con Ken Burns + parallax, listado de reseñas, proxy de CORS para imágenes |
+| 09 | [Reviews CRUD](09-reviews-crud.md) | Create/update/delete de reseñas: backend rate-only (VineJS `.optional()` + migración `ALTER`), modal con `<Teleport>`, quick-rate, refetch vs optimistic |
 
 ## Cómo usar estos docs
 

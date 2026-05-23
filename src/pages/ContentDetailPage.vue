@@ -7,6 +7,7 @@ import type { Content, PaginationMeta, Review } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import ContentDetailHeader from '@/components/content/ContentDetailHeader.vue'
 import ReviewItem from '@/components/content/ReviewItem.vue'
+import ReviewModal from '@/components/content/ReviewModal.vue'
 import PaginationControls from '@/components/PaginationControls.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 
@@ -31,6 +32,25 @@ const reviewSortOptions = [
   { value: 'recent', label: 'Más recientes' },
   { value: 'top', label: 'Mejor calificadas' },
 ]
+
+const modalOpen = ref(false)
+const editingReview = ref<Review | null>(null)
+const presetRating = ref<number | undefined>(undefined)
+const deletingId = ref<string | null>(null)
+const actionError = ref<string | null>(null)
+
+const myReview = computed(() => {
+  if (!auth.user) return null
+  return reviews.value.find((r) => r.user?.id === auth.user!.id) ?? null
+})
+
+const canWriteReview = computed(() => auth.isAuthenticated && !myReview.value)
+
+// Solo las reseñas con texto se listan como tarjetas; las puntuaciones sin
+// reseña cuentan para el promedio pero no aparecen abajo.
+const writtenReviews = computed(() =>
+  reviews.value.filter((r) => (r.title && r.title.trim()) || (r.body && r.body.trim()))
+)
 
 async function loadContent() {
   loading.value = true
@@ -70,6 +90,84 @@ async function loadReviews() {
 
 function changeReviewsPage(page: number) {
   reviewsPage.value = page
+}
+
+function openCreate() {
+  if (!auth.isAuthenticated) {
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
+  if (myReview.value) {
+    editingReview.value = myReview.value
+  } else {
+    editingReview.value = null
+  }
+  presetRating.value = undefined
+  actionError.value = null
+  modalOpen.value = true
+}
+
+function openEdit(review: Review) {
+  editingReview.value = review
+  presetRating.value = undefined
+  actionError.value = null
+  modalOpen.value = true
+}
+
+async function openQuickRate(rating: number) {
+  if (!auth.isAuthenticated) {
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
+  actionError.value = null
+  try {
+    if (myReview.value) {
+      await reviewsApi.update(myReview.value.id, { rating })
+    } else {
+      await reviewsApi.create(slug.value, { rating })
+    }
+    await Promise.all([loadReviews(), loadContent()])
+  } catch (e) {
+    console.error(e)
+    actionError.value = 'No pudimos guardar tu puntuación. Intentá de nuevo.'
+  }
+}
+
+function closeModal() {
+  modalOpen.value = false
+  editingReview.value = null
+  presetRating.value = undefined
+}
+
+async function handleSuccess() {
+  closeModal()
+  await Promise.all([loadReviews(), loadContent()])
+}
+
+async function handleDelete(review: Review) {
+  const confirmed = window.confirm('¿Borrar esta reseña? No se puede deshacer.')
+  if (!confirmed) return
+  deletingId.value = review.id
+  actionError.value = null
+  try {
+    await reviewsApi.destroy(review.id)
+    await Promise.all([loadReviews(), loadContent()])
+  } catch (e) {
+    console.error(e)
+    actionError.value = 'No pudimos borrar la reseña. Intentá de nuevo.'
+  } finally {
+    deletingId.value = null
+  }
+}
+
+function canEditReview(review: Review): boolean {
+  return !!auth.user && review.user?.id === auth.user.id
+}
+
+function canDeleteReview(review: Review): boolean {
+  if (!auth.user) return false
+  if (auth.isAdmin) return true
+  return review.user?.id === auth.user.id
 }
 
 watch(slug, async () => {
@@ -127,35 +225,66 @@ function goHome() {
     </div>
 
     <template v-else-if="content">
-      <ContentDetailHeader :content="content" />
+      <ContentDetailHeader
+        :content="content"
+        :my-review="myReview"
+        :can-quick-rate="auth.isAuthenticated"
+        @quick-rate="openQuickRate"
+        @edit-mine="myReview && openEdit(myReview)"
+      />
 
       <section class="mx-auto flex max-w-7xl flex-col gap-6 border-t border-white/10 px-6 py-12 md:px-12">
         <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div class="flex flex-col gap-1">
             <h2 class="text-2xl font-semibold tracking-tight text-white">Reseñas</h2>
-            <p v-if="reviewsMeta" class="text-sm text-white/60">
-              {{ reviewsMeta.total }} {{ reviewsMeta.total === 1 ? 'reseña en total' : 'reseñas en total' }}
+            <p v-if="writtenReviews.length" class="text-sm text-white/60">
+              {{ writtenReviews.length }} {{ writtenReviews.length === 1 ? 'reseña escrita' : 'reseñas escritas' }}
             </p>
           </div>
 
-          <div class="flex flex-wrap items-center gap-3">
-            <div v-if="reviews.length > 0" class="dark-select">
+          <div class="flex flex-wrap items-end gap-3">
+            <div v-if="writtenReviews.length > 0" class="dark-select">
               <BaseSelect
                 v-model="reviewsSort"
                 :options="reviewSortOptions"
                 label="Ordenar"
               />
             </div>
+
             <button
-              v-if="auth.isAuthenticated"
+              v-if="canWriteReview"
               type="button"
-              disabled
-              class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white opacity-70 disabled:cursor-not-allowed"
-              title="Próximamente"
+              class="rounded-md bg-white px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-white/90"
+              @click="openCreate"
             >
-              Escribir reseña (próximamente)
+              Escribir reseña
             </button>
+
+            <button
+              v-else-if="myReview"
+              type="button"
+              class="rounded-md border border-white/20 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10"
+              @click="openEdit(myReview)"
+            >
+              Editar mi reseña
+            </button>
+
+            <router-link
+              v-else
+              :to="{ path: '/login', query: { redirect: route.fullPath } }"
+              class="rounded-md border border-white/20 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10"
+            >
+              Iniciá sesión para reseñar
+            </router-link>
           </div>
+        </div>
+
+        <div
+          v-if="actionError"
+          class="rounded-md border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
+          role="alert"
+        >
+          {{ actionError }}
         </div>
 
         <div v-if="reviewsLoading" class="flex flex-col gap-4">
@@ -174,22 +303,45 @@ function goHome() {
         </div>
 
         <div
-          v-else-if="reviews.length === 0"
-          class="rounded-lg border border-white/10 bg-white/[0.03] p-8 text-center"
+          v-else-if="writtenReviews.length === 0"
+          class="flex flex-col items-center gap-4 rounded-lg border border-white/10 bg-white/[0.03] p-8 text-center"
         >
-          <p class="text-base font-medium text-white">Todavía no hay reseñas</p>
-          <p class="mt-1 text-sm text-white/60">
-            <template v-if="auth.isAuthenticated">Sé el primero en escribir una.</template>
-            <template v-else>
-              <router-link to="/login" class="text-accent hover:underline">Iniciá sesión</router-link>
-              para escribir la primera.
-            </template>
-          </p>
+          <div class="flex flex-col gap-1">
+            <p class="text-base font-medium text-white">Todavía no hay reseñas escritas</p>
+            <p class="text-sm text-white/60">
+              <template v-if="auth.isAuthenticated">Sé el primero en escribir una.</template>
+              <template v-else>Iniciá sesión para escribir la primera.</template>
+            </p>
+          </div>
+          <button
+            v-if="auth.isAuthenticated"
+            type="button"
+            class="rounded-md bg-white px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-white/90"
+            @click="openCreate"
+          >
+            Escribir reseña
+          </button>
+          <router-link
+            v-else
+            :to="{ path: '/login', query: { redirect: route.fullPath } }"
+            class="rounded-md border border-white/20 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10"
+          >
+            Iniciar sesión
+          </router-link>
         </div>
 
         <template v-else>
           <div class="flex flex-col gap-4">
-            <ReviewItem v-for="r in reviews" :key="r.id" :review="r" theme="dark" />
+            <ReviewItem
+              v-for="r in writtenReviews"
+              :key="r.id"
+              :review="r"
+              theme="dark"
+              :can-edit="canEditReview(r)"
+              :can-delete="canDeleteReview(r) && deletingId !== r.id"
+              @edit="openEdit"
+              @delete="handleDelete"
+            />
           </div>
 
           <PaginationControls
@@ -200,6 +352,15 @@ function goHome() {
         </template>
       </section>
     </template>
+
+    <ReviewModal
+      :open="modalOpen"
+      :content-slug="slug"
+      :initial="editingReview"
+      :preset-rating="presetRating"
+      @close="closeModal"
+      @success="handleSuccess"
+    />
   </div>
 </template>
 
@@ -208,11 +369,16 @@ function goHome() {
   color: rgba(255, 255, 255, 0.6);
 }
 .dark-select :deep(select) {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: rgba(20, 20, 20, 0.95);
   border-color: rgba(255, 255, 255, 0.15);
   color: white;
+  color-scheme: dark;
 }
 .dark-select :deep(select):hover {
   border-color: rgba(255, 255, 255, 0.3);
+}
+.dark-select :deep(select) option {
+  background-color: #0a0a0a;
+  color: white;
 }
 </style>

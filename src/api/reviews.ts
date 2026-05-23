@@ -8,9 +8,9 @@ export interface ReviewListParams {
 }
 
 export interface CreateReviewInput {
-  rating: number    // 1-10
-  title: string     // 3-200 chars
-  body: string      // 10-10000 chars
+  rating: number     // 1-10
+  title?: string     // 3-200 chars (opcional: se puede puntuar sin reseña)
+  body?: string      // 10-10000 chars (opcional)
 }
 
 export type UpdateReviewInput = Partial<CreateReviewInput>
