@@ -25,6 +25,18 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/ContentDetailPage.vue'),
     meta: { fullBleed: true },
   },
+  {
+    path: '/watchlists',
+    name: 'watchlists',
+    component: () => import('@/pages/WatchlistsPage.vue'),
+    meta: { requiresAuth: true, fullBleed: true },
+  },
+  {
+    path: '/watchlists/:id',
+    name: 'watchlist-detail',
+    component: () => import('@/pages/WatchlistDetailPage.vue'),
+    meta: { requiresAuth: true, fullBleed: true },
+  },
 ]
 
 const router = createRouter({

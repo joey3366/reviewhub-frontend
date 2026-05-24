@@ -76,3 +76,46 @@ export interface Review {
   updatedAt: string | null
   user?: ReviewAuthor
 }
+
+/** El contenido embebido dentro de un item de watchlist (subset liviano). */
+export interface WatchlistItemContent {
+  id: string
+  slug: string
+  title: string
+  type: 'movie' | 'series'
+  posterUrl: string | null
+  backdropUrl: string | null
+  avgRating: number | null
+}
+
+export interface WatchlistItem {
+  id: string
+  watchlistId: string
+  contentId: string
+  position: number
+  durationSeconds: number
+  durationFormatted: string       // ej. "2h 30m" (lo arma el backend)
+  episodesWatched: number | null
+  startedAt: string | null        // yyyy-MM-dd
+  finishedAt: string | null       // yyyy-MM-dd
+  daysElapsed: number | null      // calculado por el backend
+  avgDaysPerEpisode: number | null
+  createdAt: string
+  updatedAt: string | null
+  content?: WatchlistItemContent  // viene en el detalle (show), no en otros lados
+}
+
+export interface Watchlist {
+  id: string
+  name: string
+  isPublic: boolean
+  position: number                // orden personalizado (asc)
+  userId: string
+  createdAt: string
+  updatedAt: string | null
+  itemsCount?: number             // en list (withCount) y en show
+  // Los siguientes solo vienen en el detalle (show), donde se precargan los items:
+  items?: WatchlistItem[]
+  totalDurationSeconds?: number
+  totalDurationFormatted?: string
+}

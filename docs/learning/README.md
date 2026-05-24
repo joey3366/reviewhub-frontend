@@ -32,6 +32,7 @@ tooling y UX que tomamos en el camino.
 | 07 | [Pages y forms](07-pages-y-forms.md) | `HomePage` con loading/empty/error states; `LoginPage`/`SignupPage` con manejo de 422 field errors y 429 rate limit |
 | 08 | [Content detail + reviews (lectura)](08-content-detail-y-reviews.md) | Detail page cinemática: doble state machine, rutas full-bleed, hero con Ken Burns + parallax, listado de reseñas, proxy de CORS para imágenes |
 | 09 | [Reviews CRUD](09-reviews-crud.md) | Create/update/delete de reseñas: backend rate-only (VineJS `.optional()` + migración `ALTER`), modal con `<Teleport>`, quick-rate, refetch vs optimistic |
+| 10 | [Watchlists](10-watchlists.md) | Listas: popover "Mi lista", página cinematográfica (fondo + Ken Burns + partículas), portada por calificación, drag-reorder persistido (columna `position`), slideshow de fondos, y el bug del `DECIMAL` como string |
 
 ## Cómo usar estos docs
 

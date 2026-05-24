@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { Content, Review } from '@/api/types'
 import RatingStars from './RatingStars.vue'
+import WatchlistButton from '@/components/watchlists/WatchlistButton.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -121,17 +122,7 @@ function goBack() {
           </div>
 
           <div class="flex items-center gap-3">
-            <button
-              type="button"
-              disabled
-              class="flex h-11 items-center gap-2 rounded-full border border-white/25 px-4 text-sm font-medium text-white opacity-80 transition-colors disabled:cursor-not-allowed hover:bg-white/10"
-              title="Próximamente"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              Mi lista
-            </button>
+            <WatchlistButton :content="content" />
           </div>
         </div>
 

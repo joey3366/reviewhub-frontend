@@ -49,17 +49,18 @@ async function handleLogout() {
         >
           Catálogo
         </RouterLink>
-        <span
+        <RouterLink
           v-if="auth.isAuthenticated"
+          to="/watchlists"
           :class="
             isDark
-              ? 'cursor-not-allowed rounded-md px-3 py-1.5 text-sm font-medium text-white/40'
-              : 'cursor-not-allowed rounded-md px-3 py-1.5 text-sm font-medium text-ink-subtle'
+              ? 'rounded-md px-3 py-1.5 text-sm font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white'
+              : 'rounded-md px-3 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-subtle hover:text-ink'
           "
-          title="Próximamente"
+          :active-class="isDark ? 'text-white' : 'text-ink'"
         >
           Mis listas
-        </span>
+        </RouterLink>
         <span
           v-if="auth.isAdmin"
           :class="
