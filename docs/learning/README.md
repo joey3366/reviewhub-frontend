@@ -33,6 +33,7 @@ tooling y UX que tomamos en el camino.
 | 08 | [Content detail + reviews (lectura)](08-content-detail-y-reviews.md) | Detail page cinemática: doble state machine, rutas full-bleed, hero con Ken Burns + parallax, listado de reseñas, proxy de CORS para imágenes |
 | 09 | [Reviews CRUD](09-reviews-crud.md) | Create/update/delete de reseñas: backend rate-only (VineJS `.optional()` + migración `ALTER`), modal con `<Teleport>`, quick-rate, refetch vs optimistic |
 | 10 | [Watchlists](10-watchlists.md) | Listas: popover "Mi lista", página cinematográfica (fondo + Ken Burns + partículas), portada por calificación, drag-reorder persistido (columna `position`), slideshow de fondos, y el bug del `DECIMAL` como string |
+| 11 | [Playback](11-playback.md) | Ritmo + días libres, seguimiento por título (duración con segundos, episodios, fechas solo-series), pronóstico ("terminás el X") y retrospectiva; el footgun de `v-model` + `type="number"`, y el acoplamiento modo↔ritmo |
 
 ## Cómo usar estos docs
 

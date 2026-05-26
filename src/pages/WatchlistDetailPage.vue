@@ -3,6 +3,9 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { Watchlist, WatchlistItem } from '@/api/types'
 import { watchlistsApi } from '@/api/watchlists'
+import ItemTrackingModal from '@/components/watchlists/ItemTrackingModal.vue'
+import ForecastModal from '@/components/watchlists/ForecastModal.vue'
+import RetrospectiveModal from '@/components/watchlists/RetrospectiveModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -14,6 +17,13 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const actionError = ref<string | null>(null)
 const removingId = ref<string | null>(null)
+
+// Modal de seguimiento (duración/episodios/fechas). null = cerrado.
+const trackingItem = ref<WatchlistItem | null>(null)
+// Modal de pronóstico. null = cerrado.
+const forecastItem = ref<WatchlistItem | null>(null)
+// Modal de retrospectiva. null = cerrado.
+const retroItem = ref<WatchlistItem | null>(null)
 
 const items = computed(() => watchlist.value?.items ?? [])
 
@@ -144,6 +154,63 @@ async function removeItem(item: WatchlistItem) {
   }
 }
 
+// --- Seguimiento ---
+function openTracking(item: WatchlistItem) {
+  trackingItem.value = item
+}
+async function onTrackingSaved() {
+  trackingItem.value = null
+  if (!watchlist.value) return
+  try {
+    // Refrescamos para recalcular duración total y campos derivados (daysElapsed).
+    watchlist.value = await watchlistsApi.show(watchlist.value.id)
+  } catch (e) {
+    actionError.value = 'Se guardó, pero no pudimos refrescar la lista.'
+    console.error(e)
+  }
+}
+
+// "2h 30m 45s" a partir de segundos (más legible que el HH:MM:SS del backend).
+// Omite las partes en cero, pero muestra los segundos cuando los hay.
+function fmtDuration(sec: number) {
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  const parts: string[] = []
+  if (h) parts.push(`${h}h`)
+  if (m) parts.push(`${m}m`)
+  if (s) parts.push(`${s}s`)
+  return parts.length ? parts.join(' ') : '0m'
+}
+
+// Total visto de la lista (incluye segundos), formateado lindo.
+const totalWatchedLabel = computed(() => fmtDuration(watchlist.value?.totalDurationSeconds ?? 0))
+function hasTracking(item: WatchlistItem) {
+  return (
+    item.durationSeconds > 0 ||
+    (item.episodesWatched ?? 0) > 0 ||
+    !!item.startedAt ||
+    !!item.finishedAt
+  )
+}
+// Pronóstico y retrospectiva son solo para series: una peli se ve de una.
+function canForecast(item: WatchlistItem) {
+  return (
+    item.content?.type === 'series' &&
+    (item.durationSeconds > 0 || (item.episodesWatched ?? 0) > 0)
+  )
+}
+function openForecast(item: WatchlistItem) {
+  forecastItem.value = item
+}
+// Hay retrospectiva si es serie y ya marcaste inicio y fin (terminada).
+function canRetrospect(item: WatchlistItem) {
+  return item.content?.type === 'series' && !!item.startedAt && !!item.finishedAt
+}
+function openRetro(item: WatchlistItem) {
+  retroItem.value = item
+}
+
 function goBack() {
   router.push({ name: 'watchlists' })
 }
@@ -213,10 +280,20 @@ watch(id, loadWatchlist, { immediate: true })
             {{ watchlist.isPublic ? 'Pública' : 'Privada' }}
           </span>
           <h1 class="text-4xl font-bold tracking-tight md:text-5xl">{{ watchlist.name }}</h1>
-          <p class="text-sm text-white/60">
-            {{ itemsCountLabel }}
-            <template v-if="showDuration"> · {{ watchlist.totalDurationFormatted }}</template>
-          </p>
+          <div class="flex flex-wrap items-center gap-3">
+            <span class="text-sm text-white/60">{{ itemsCountLabel }}</span>
+            <span
+              v-if="showDuration"
+              class="inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-amber-400/10 px-3.5 py-1.5 shadow-lg shadow-amber-500/10 backdrop-blur-sm"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-amber-300">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+              <span class="text-xs font-medium uppercase tracking-wide text-white/50">Total visto</span>
+              <span class="text-base font-bold tabular-nums text-amber-300">{{ totalWatchedLabel }}</span>
+            </span>
+          </div>
         </header>
 
         <p v-if="actionError" class="mt-6 rounded-md border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">
@@ -265,6 +342,20 @@ watch(id, loadWatchlist, { immediate: true })
                   {{ item.content?.title }}
                 </span>
               </button>
+              <!-- Seguimiento -->
+              <button
+                type="button"
+                class="absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 opacity-0 backdrop-blur-sm transition-opacity hover:bg-amber-500/80 hover:text-black group-hover:opacity-100"
+                :class="hasTracking(item) ? 'text-amber-300 opacity-100' : 'text-white/90'"
+                :aria-label="`Editar seguimiento de ${item.content?.title}`"
+                title="Seguimiento: duración, episodios y fechas"
+                @click="openTracking(item)"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3 2" />
+                </svg>
+              </button>
               <!-- Quitar -->
               <button
                 type="button"
@@ -289,11 +380,90 @@ watch(id, loadWatchlist, { immediate: true })
                 <span>{{ typeLabel(item) }}</span>
                 <span v-if="ratingDisplay(item)" class="text-amber-300">★ {{ ratingDisplay(item) }}</span>
               </p>
+              <!-- Seguimiento cargado -->
+              <p
+                v-if="hasTracking(item)"
+                class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-amber-200/60"
+              >
+                <span v-if="item.durationSeconds > 0" class="inline-flex items-center gap-1">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 2" />
+                  </svg>
+                  {{ fmtDuration(item.durationSeconds) }}
+                </span>
+                <span v-if="(item.episodesWatched ?? 0) > 0">{{ item.episodesWatched }} ep</span>
+                <span v-if="item.daysElapsed != null" class="inline-flex items-center gap-1">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <path d="M16 2v4M8 2v4M3 10h18" />
+                  </svg>
+                  {{ item.daysElapsed }}d
+                </span>
+                <span v-else-if="item.startedAt" class="inline-flex items-center gap-1 text-amber-300/70">
+                  <svg viewBox="0 0 24 24" fill="currentColor" class="h-3 w-3">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  viendo
+                </span>
+              </p>
+              <!-- Pronóstico / Retrospectiva -->
+              <div
+                v-if="canForecast(item) || canRetrospect(item)"
+                class="mt-1 flex flex-wrap gap-x-3 gap-y-1"
+              >
+                <button
+                  v-if="canForecast(item)"
+                  type="button"
+                  class="inline-flex items-center gap-1 text-xs font-medium text-amber-300/80 transition-colors hover:text-amber-300"
+                  @click="openForecast(item)"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4" />
+                  </svg>
+                  Pronóstico
+                </button>
+                <button
+                  v-if="canRetrospect(item)"
+                  type="button"
+                  class="inline-flex items-center gap-1 text-xs font-medium text-sky-300/80 transition-colors hover:text-sky-300"
+                  @click="openRetro(item)"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                    <path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-6.36 2.64L3 8" />
+                    <path d="M3 3v5h5" />
+                  </svg>
+                  Retrospectiva
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </template>
     </div>
+
+    <ItemTrackingModal
+      :open="!!trackingItem"
+      :watchlist-id="watchlist?.id ?? ''"
+      :item="trackingItem"
+      @close="trackingItem = null"
+      @saved="onTrackingSaved"
+    />
+
+    <ForecastModal
+      :open="!!forecastItem"
+      :watchlist-id="watchlist?.id ?? ''"
+      :item="forecastItem"
+      @close="forecastItem = null"
+    />
+
+    <RetrospectiveModal
+      :open="!!retroItem"
+      :watchlist-id="watchlist?.id ?? ''"
+      :item="retroItem"
+      @close="retroItem = null"
+    />
   </div>
 </template>
 

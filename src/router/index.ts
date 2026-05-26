@@ -37,6 +37,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/WatchlistDetailPage.vue'),
     meta: { requiresAuth: true, fullBleed: true },
   },
+  {
+    path: '/ritmo',
+    name: 'pace',
+    component: () => import('@/pages/PacePage.vue'),
+    meta: { requiresAuth: true, fullBleed: true },
+  },
 ]
 
 const router = createRouter({

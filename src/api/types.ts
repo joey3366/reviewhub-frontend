@@ -119,3 +119,66 @@ export interface Watchlist {
   totalDurationSeconds?: number
   totalDurationFormatted?: string
 }
+
+// --- Playback (fase 4): ritmo, días libres, pronóstico, retrospectiva ---
+
+/** Días de la semana en minúsculas, como los espera/devuelve el backend. */
+export type Weekday =
+  | 'monday'
+  | 'tuesday'
+  | 'wednesday'
+  | 'thursday'
+  | 'friday'
+  | 'saturday'
+  | 'sunday'
+
+/** El ritmo de visionado del usuario (1:1 con la cuenta). */
+export interface PaceSettings {
+  dailyMinutes: number | null     // minutos por día (modo "time")
+  dailyEpisodes: number | null    // episodios por día (modo "episodes")
+  skipWeekdays: Weekday[]         // días que NO se ve nada
+  updatedAt: string
+}
+
+/** Un día libre/feriado: no cuenta para el plan. */
+export interface Holiday {
+  date: string                    // yyyy-MM-dd
+  name: string | null
+}
+
+/** Qué dimensión del ritmo se usó para calcular. */
+export type ForecastMode = 'time' | 'episodes'
+
+/** El ritmo efectivo que terminó usando un cálculo (settings + overrides). */
+export interface ForecastPace {
+  dailyMinutes: number | null
+  dailyEpisodes: number | null
+  skipWeekdays: Weekday[]
+  skipHolidays: boolean
+}
+
+/** Pronóstico: "si arrancás tal día, terminás tal día". */
+export interface Forecast {
+  mode: ForecastMode
+  requiredDays: number            // días válidos necesarios para terminar
+  startDate: string               // yyyy-MM-dd
+  finishDate: string              // yyyy-MM-dd
+  skippedDays: number             // días salteados dentro del rango
+  totalCalendarDays: number       // días de calendario de punta a punta
+  pace: ForecastPace
+}
+
+/** Retrospectiva: qué tan bien cumpliste el ritmo en algo ya terminado. */
+export interface Retrospective {
+  mode: ForecastMode
+  startedAt: string               // yyyy-MM-dd (del item)
+  finishedAt: string              // yyyy-MM-dd (del item)
+  expectedDays: number            // días válidos que "debería" haber tomado
+  actualValidDays: number         // días válidos reales en el rango
+  actualSkippedDays: number       // días salteados reales en el rango
+  actualCalendarDays: number      // días de calendario reales
+  deviationDays: number           // actualValidDays - expectedDays (+ = más lento)
+  toleranceDays: number           // margen tolerado (10% de expectedDays, mín 1)
+  onPace: boolean                 // |deviationDays| <= toleranceDays
+  pace: ForecastPace
+}
