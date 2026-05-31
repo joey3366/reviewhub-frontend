@@ -93,16 +93,28 @@ export interface WatchlistItem {
   watchlistId: string
   contentId: string
   position: number
-  durationSeconds: number
-  durationFormatted: string       // ej. "2h 30m" (lo arma el backend)
-  episodesWatched: number | null
-  startedAt: string | null        // yyyy-MM-dd
-  finishedAt: string | null       // yyyy-MM-dd
-  daysElapsed: number | null      // calculado por el backend
+  durationSeconds: number          // duración TOTAL planificada del título
+  durationFormatted: string        // ej. "2h 30m" (lo arma el backend)
+  episodesWatched: number | null   // episodios TOTALES de la serie
+  durationProgressSeconds: number  // cuánto llevás visto (in-flight)
+  episodesProgress: number | null  // cuántos episodios llevás vistos
+  startedAt: string | null         // yyyy-MM-dd
+  finishedAt: string | null        // yyyy-MM-dd
+  daysElapsed: number | null       // calculado por el backend
   avgDaysPerEpisode: number | null
   createdAt: string
   updatedAt: string | null
-  content?: WatchlistItemContent  // viene en el detalle (show), no en otros lados
+  content?: WatchlistItemContent   // viene en el detalle (show), no en otros lados
+  // Si el item es HEREDADO de una lista incluida, vienen estos campos:
+  viaWatchlistId?: string
+  viaWatchlistName?: string
+}
+
+/** Resumen de una lista incluida (hija directa) dentro del detalle del padre. */
+export interface IncludedListSummary {
+  id: string
+  name: string
+  itemsCount: number
 }
 
 export interface Watchlist {
@@ -114,10 +126,13 @@ export interface Watchlist {
   createdAt: string
   updatedAt: string | null
   itemsCount?: number             // en list (withCount) y en show
+  moviesCount?: number            // solo en listMine (subquery por tipo)
+  seriesCount?: number            // solo en listMine (subquery por tipo)
   // Los siguientes solo vienen en el detalle (show), donde se precargan los items:
   items?: WatchlistItem[]
   totalDurationSeconds?: number
   totalDurationFormatted?: string
+  includedLists?: IncludedListSummary[]  // listas hijas (solo visible al dueño)
 }
 
 // --- Playback (fase 4): ritmo, días libres, pronóstico, retrospectiva ---
@@ -165,6 +180,28 @@ export interface Forecast {
   finishDate: string              // yyyy-MM-dd
   skippedDays: number             // días salteados dentro del rango
   totalCalendarDays: number       // días de calendario de punta a punta
+  pace: ForecastPace
+}
+
+/**
+ * Cómo voy: chequeo in-flight (serie empezada pero NO terminada). Compara
+ * cuántos días válidos pasaron desde startedAt hasta hoy contra cuánto progreso
+ * llevás cargado. mismo veredicto verde/ámbar/celeste que la retrospectiva.
+ */
+export interface Progress {
+  mode: ForecastMode
+  startedAt: string                 // yyyy-MM-dd
+  asOf: string                      // yyyy-MM-dd (hoy)
+  validDaysElapsed: number          // días útiles desde startedAt hasta hoy
+  skippedDaysElapsed: number
+  calendarDaysElapsed: number
+  expectedUnits: number             // mode=time: seg esperados; mode=ep: ep esperados
+  actualUnits: number               // lo que cargaste (durationProgressSeconds o episodesProgress)
+  equivalentDaysOfActual: number    // cuántos días "vale" tu progreso real
+  deviationDays: number             // validDaysElapsed - equivalentDaysOfActual (+ = atrasada)
+  toleranceDays: number
+  onPace: boolean
+  progressLogged: boolean           // false = no cargaste progreso aún
   pace: ForecastPace
 }
 

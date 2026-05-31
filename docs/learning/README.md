@@ -34,6 +34,7 @@ tooling y UX que tomamos en el camino.
 | 09 | [Reviews CRUD](09-reviews-crud.md) | Create/update/delete de reseñas: backend rate-only (VineJS `.optional()` + migración `ALTER`), modal con `<Teleport>`, quick-rate, refetch vs optimistic |
 | 10 | [Watchlists](10-watchlists.md) | Listas: popover "Mi lista", página cinematográfica (fondo + Ken Burns + partículas), portada por calificación, drag-reorder persistido (columna `position`), slideshow de fondos, y el bug del `DECIMAL` como string |
 | 11 | [Playback](11-playback.md) | Ritmo + días libres, seguimiento por título (duración con segundos, episodios, fechas solo-series), pronóstico ("terminás el X") y retrospectiva; el footgun de `v-model` + `type="number"`, y el acoplamiento modo↔ritmo |
+| 12 | [Progreso, anidación y tabs](12-progreso-anidacion-y-tabs.md) | "¿Cómo voy?" (mid-flight check con campo nuevo en el item + endpoint dedicado), listas anidadas (many-to-many auto-referencial + dedupe BFS + anti-ciclo DFS) y tabs por tipo (subqueries raw + localStorage); bugs de Luxon/MySQL DATETIME y `<select>` en dark |
 
 ## Cómo usar estos docs
 

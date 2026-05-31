@@ -10,8 +10,10 @@ export type UpdateWatchlistInput = Partial<CreateWatchlistInput>
 
 export interface CreateWatchlistItemInput {
   contentId: string                 // UUID del contenido
-  durationSeconds?: number
-  episodesWatched?: number | null
+  durationSeconds?: number          // duración TOTAL planificada
+  episodesWatched?: number | null   // episodios TOTALES (alimenta el pronóstico)
+  durationProgressSeconds?: number  // cuánto llevás visto (in-flight)
+  episodesProgress?: number | null  // cuántos episodios llevás vistos
   startedAt?: string | null         // yyyy-MM-dd
   finishedAt?: string | null        // yyyy-MM-dd
 }
@@ -78,5 +80,20 @@ export const watchlistsApi = {
   // Guarda el orden de los items: itemIds en el orden deseado.
   reorderItems: async (watchlistId: string, itemIds: string[]) => {
     await client.patch(`/watchlists/${watchlistId}/items/reorder`, { itemIds })
+  },
+
+  // --- Inclusión de listas (anidadas) ---
+
+  /** Incluye `childId` como hija de `parentId`. Errores: 409 dup, 422 ciclo/self, 403 ajena. */
+  addInclude: async (parentId: string, childId: string) => {
+    const { data } = await client.post<{ data: { childId: string; name: string } }>(
+      `/watchlists/${parentId}/includes`,
+      { childId }
+    )
+    return data.data
+  },
+
+  removeInclude: async (parentId: string, childId: string) => {
+    await client.delete(`/watchlists/${parentId}/includes/${childId}`)
   },
 }

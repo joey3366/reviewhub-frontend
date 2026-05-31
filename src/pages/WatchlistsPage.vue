@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { Watchlist } from '@/api/types'
 import { watchlistsApi } from '@/api/watchlists'
@@ -11,6 +11,32 @@ const covers = ref<Record<string, string | null>>({})
 const loading = ref(true)
 const error = ref<string | null>(null)
 const actionError = ref<string | null>(null)
+
+// Tabs por tipo: 'all' | 'movies' | 'series'. Persistido entre sesiones.
+type ListsTab = 'all' | 'movies' | 'series'
+const TAB_KEY = 'reviewhub_lists_tab'
+function readTab(): ListsTab {
+  const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(TAB_KEY) : null
+  return raw === 'movies' || raw === 'series' ? raw : 'all'
+}
+const activeTab = ref<ListsTab>(readTab())
+watch(activeTab, (v) => {
+  try { localStorage.setItem(TAB_KEY, v) } catch { /* localStorage puede fallar en privado */ }
+})
+
+// Una lista entra en "Películas" si tiene al menos 1 movie; idem "Series".
+// Las mixtas aparecen en ambas pestañas (eso es la promesa visual del tab).
+const filteredLists = computed(() => {
+  if (activeTab.value === 'all') return lists.value
+  if (activeTab.value === 'movies') return lists.value.filter((l) => (l.moviesCount ?? 0) > 0)
+  return lists.value.filter((l) => (l.seriesCount ?? 0) > 0)
+})
+
+const counts = computed(() => ({
+  all: lists.value.length,
+  movies: lists.value.filter((l) => (l.moviesCount ?? 0) > 0).length,
+  series: lists.value.filter((l) => (l.seriesCount ?? 0) > 0).length,
+}))
 
 // Crear
 const showCreate = ref(false)
@@ -52,9 +78,13 @@ async function persistOrder() {
 }
 
 function onDragStart(index: number) {
+  // El reorder solo funciona en "Todas": el orden vive en una columna global
+  // (position) y reordenar una vista filtrada produciría un desorden raro.
+  if (activeTab.value !== 'all') return
   dragIndex.value = index
 }
 function onDragEnter(index: number) {
+  if (activeTab.value !== 'all') return
   if (dragIndex.value === null || dragIndex.value === index) return
   const arr = [...lists.value]
   const [moved] = arr.splice(dragIndex.value, 1)
@@ -63,6 +93,7 @@ function onDragEnter(index: number) {
   dragIndex.value = index
 }
 function onDragEnd() {
+  if (dragIndex.value === null) return
   dragIndex.value = null
   persistOrder()
 }
@@ -263,7 +294,10 @@ onMounted(loadLists)
         <div class="flex flex-col gap-2">
           <h1 class="text-4xl font-bold tracking-tight">Mis listas</h1>
           <p v-if="!loading && !error" class="text-sm text-amber-300/80">
-            {{ lists.length }} {{ lists.length === 1 ? 'lista' : 'listas' }}
+            {{ filteredLists.length }} {{ filteredLists.length === 1 ? 'lista' : 'listas' }}
+            <span v-if="activeTab !== 'all'" class="text-white/40">
+              de {{ lists.length }} {{ lists.length === 1 ? 'total' : 'totales' }}
+            </span>
           </p>
           <p v-else class="text-sm text-white/50">Cargando…</p>
         </div>
@@ -317,6 +351,55 @@ onMounted(loadLists)
         </div>
       </form>
 
+      <!-- Tabs por tipo -->
+      <div
+        v-if="!loading && !error && lists.length > 0"
+        role="tablist"
+        class="mt-6 inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] p-1 backdrop-blur-sm"
+      >
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === 'all'"
+          class="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition-colors"
+          :class="activeTab === 'all' ? 'bg-amber-400 text-black shadow' : 'text-white/70 hover:text-white'"
+          @click="activeTab = 'all'"
+        >
+          Todas
+          <span class="text-xs opacity-70">{{ counts.all }}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === 'movies'"
+          class="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition-colors"
+          :class="activeTab === 'movies' ? 'bg-amber-400 text-black shadow' : 'text-white/70 hover:text-white'"
+          @click="activeTab = 'movies'"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+            <rect x="2" y="4" width="20" height="16" rx="2" />
+            <path d="M2 8h20M6 4v16M18 4v16" />
+          </svg>
+          Películas
+          <span class="text-xs opacity-70">{{ counts.movies }}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === 'series'"
+          class="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition-colors"
+          :class="activeTab === 'series' ? 'bg-amber-400 text-black shadow' : 'text-white/70 hover:text-white'"
+          @click="activeTab = 'series'"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+            <rect x="2" y="6" width="20" height="14" rx="2" />
+            <path d="m8 2 4 4 4-4" />
+          </svg>
+          Series
+          <span class="text-xs opacity-70">{{ counts.series }}</span>
+        </button>
+      </div>
+
       <p v-if="actionError" class="mt-6 rounded-md border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">
         {{ actionError }}
       </p>
@@ -348,14 +431,38 @@ onMounted(loadLists)
         </button>
       </div>
 
+      <!-- Filtro vacío (tiene listas pero ninguna del tipo del tab) -->
+      <div
+        v-else-if="filteredLists.length === 0"
+        class="mt-8 flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-12 text-center backdrop-blur-sm"
+      >
+        <p class="text-lg font-semibold text-white">
+          <template v-if="activeTab === 'movies'">No tenés listas con películas</template>
+          <template v-else>No tenés listas con series</template>
+        </p>
+        <p class="text-sm text-white/60">
+          Agregá algún título del tipo correspondiente a tus listas, o cambiá de pestaña.
+        </p>
+        <button
+          type="button"
+          class="mt-1 inline-flex h-10 items-center gap-2 rounded-full border border-white/15 px-5 text-sm font-medium text-white/80 transition-colors hover:bg-white/10"
+          @click="activeTab = 'all'"
+        >
+          Ver todas
+        </button>
+      </div>
+
       <!-- Grilla -->
       <div v-else class="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <article
-          v-for="(list, index) in lists"
+          v-for="(list, index) in filteredLists"
           :key="list.id"
-          :draggable="editingId !== list.id"
-          class="card-glow group relative flex h-64 cursor-grab flex-col justify-end overflow-hidden rounded-2xl border border-amber-400/25 bg-zinc-900 transition-all duration-200 active:cursor-grabbing"
-          :class="dragIndex === index ? 'scale-[0.97] opacity-60 ring-2 ring-amber-300/70' : ''"
+          :draggable="editingId !== list.id && activeTab === 'all'"
+          class="card-glow group relative flex h-64 flex-col justify-end overflow-hidden rounded-2xl border border-amber-400/25 bg-zinc-900 transition-all duration-200"
+          :class="[
+            activeTab === 'all' ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
+            dragIndex === index ? 'scale-[0.97] opacity-60 ring-2 ring-amber-300/70' : '',
+          ]"
           @click="goToDetail(list)"
           @dragstart="onDragStart(index)"
           @dragenter.prevent="onDragEnter(index)"

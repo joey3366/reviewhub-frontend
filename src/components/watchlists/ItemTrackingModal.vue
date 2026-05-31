@@ -18,14 +18,23 @@ const emit = defineEmits<{
 const dialogRef = ref<HTMLDivElement | null>(null)
 
 // Inputs numéricos: number|null + v-model.number (ver reference-frontend-gotchas).
+// "Totales" = lo que vas a ver completo (alimenta el pronóstico).
 const hours = ref<number | null>(null)
 const minutes = ref<number | null>(null)
 const seconds = ref<number | null>(null)
 const episodes = ref<number | null>(null)
+// "Progreso" = lo que LLEVÁS visto hasta hoy (alimenta el "¿Cómo voy?").
+const progressHours = ref<number | null>(null)
+const progressMinutes = ref<number | null>(null)
+const progressSeconds = ref<number | null>(null)
+const progressEpisodes = ref<number | null>(null)
 const startedAt = ref('')
 const finishedAt = ref('')
 const saving = ref(false)
 const error = ref<string | null>(null)
+// El bloque "Tu progreso hasta hoy" arranca abierto solo si ya hay progreso
+// cargado, para no recargar el modal en el primer uso.
+const progressOpen = ref(false)
 
 const isSeries = computed(() => props.item?.content?.type === 'series')
 const title = computed(() => props.item?.content?.title ?? 'este título')
@@ -42,9 +51,38 @@ function resetFromItem() {
   minutes.value = sec > 0 ? Math.floor((sec % 3600) / 60) : null
   seconds.value = sec > 0 ? sec % 60 : null
   episodes.value = props.item?.episodesWatched ?? null
+  const psec = props.item?.durationProgressSeconds ?? 0
+  progressHours.value = psec > 0 ? Math.floor(psec / 3600) : null
+  progressMinutes.value = psec > 0 ? Math.floor((psec % 3600) / 60) : null
+  progressSeconds.value = psec > 0 ? psec % 60 : null
+  progressEpisodes.value = props.item?.episodesProgress ?? null
   startedAt.value = props.item?.startedAt ?? ''
   finishedAt.value = props.item?.finishedAt ?? ''
+  progressOpen.value = psec > 0 || (props.item?.episodesProgress ?? 0) > 0
 }
+
+// Resumen corto del progreso para mostrar en el header colapsado.
+const progressSummary = computed(() => {
+  const sec =
+    (fieldValue(progressHours.value) ?? 0) * 3600 +
+    (fieldValue(progressMinutes.value) ?? 0) * 60 +
+    (fieldValue(progressSeconds.value) ?? 0)
+  const eps = fieldValue(progressEpisodes.value) ?? 0
+  if (sec === 0 && eps === 0) return null
+  const parts: string[] = []
+  if (eps > 0) parts.push(`${eps} ${eps === 1 ? 'ep' : 'ep'} vistos`)
+  if (sec > 0) {
+    const h = Math.floor(sec / 3600)
+    const m = Math.floor((sec % 3600) / 60)
+    const s = sec % 60
+    const time: string[] = []
+    if (h) time.push(`${h}h`)
+    if (m) time.push(`${m}m`)
+    if (s) time.push(`${s}s`)
+    parts.push(time.join(' '))
+  }
+  return parts.join(' · ')
+})
 
 function close() {
   emit('close')
@@ -58,6 +96,12 @@ async function save() {
   const s = fieldValue(seconds.value) ?? 0
   const durationSeconds = h * 3600 + m * 60 + s
   const eps = isSeries.value ? fieldValue(episodes.value) : null
+  // Progreso parcial: solo series y solo si está empezada (con startedAt).
+  const ph = fieldValue(progressHours.value) ?? 0
+  const pm = fieldValue(progressMinutes.value) ?? 0
+  const ps = fieldValue(progressSeconds.value) ?? 0
+  const durationProgressSeconds = isSeries.value ? ph * 3600 + pm * 60 + ps : 0
+  const progressEps = isSeries.value ? fieldValue(progressEpisodes.value) : null
   // Las pelis no llevan fechas: se ven de una.
   const start = isSeries.value ? startedAt.value || null : null
   const finish = isSeries.value ? finishedAt.value || null : null
@@ -70,6 +114,8 @@ async function save() {
     await watchlistsApi.updateItem(props.watchlistId, props.item.id, {
       durationSeconds,
       episodesWatched: eps,
+      durationProgressSeconds,
+      episodesProgress: progressEps,
       startedAt: start,
       finishedAt: finish,
     })
@@ -165,11 +211,14 @@ onBeforeUnmount(() => {
           </p>
 
           <form class="mt-5 flex flex-col gap-5" @submit.prevent="save">
-            <!-- Duración -->
+            <!-- Plan total -->
             <div>
               <span class="text-sm font-medium text-white">
-                {{ isSeries ? 'Duración total que viste' : 'Duración' }}
+                {{ isSeries ? 'Duración total' : 'Duración' }}
               </span>
+              <p v-if="isSeries" class="mt-0.5 text-xs text-white/40">
+                Cuánto dura la serie entera. Lo usa el pronóstico.
+              </p>
               <div class="mt-2 flex items-center gap-2">
                 <label class="flex flex-1 flex-col gap-1">
                   <input
@@ -209,9 +258,9 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <!-- Episodios (solo series) -->
+            <!-- Episodios totales (solo series) -->
             <label v-if="isSeries" class="flex flex-col gap-1.5">
-              <span class="text-sm font-medium text-white">Episodios</span>
+              <span class="text-sm font-medium text-white">Episodios totales</span>
               <input
                 v-model.number="episodes"
                 type="number"
@@ -221,9 +270,85 @@ onBeforeUnmount(() => {
                 class="h-11 rounded-md border border-white/15 bg-white/[0.04] px-3 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
               />
               <span class="text-xs text-white/40">
-                los que vas a ver en total (o los que viste) — es lo que usa el pronóstico
+                los que tiene la serie entera. Lo usa el pronóstico.
               </span>
             </label>
+
+            <!-- Tu progreso hasta hoy (solo series) — desplegable -->
+            <div v-if="isSeries" class="overflow-hidden rounded-lg border border-sky-400/20 bg-sky-400/[0.04]">
+              <button
+                type="button"
+                class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-sky-400/[0.06]"
+                :aria-expanded="progressOpen"
+                aria-controls="progress-fields"
+                @click="progressOpen = !progressOpen"
+              >
+                <span class="flex flex-col gap-0.5">
+                  <span class="text-sm font-medium text-sky-200">Tu progreso hasta hoy</span>
+                  <span class="text-xs text-sky-200/60">
+                    <template v-if="progressSummary">{{ progressSummary }}</template>
+                    <template v-else>cargá lo que llevás visto para "¿Cómo voy?"</template>
+                  </span>
+                </span>
+                <svg
+                  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                  class="h-4 w-4 shrink-0 text-sky-200/70 transition-transform"
+                  :class="progressOpen ? 'rotate-180' : ''"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+              <div v-if="progressOpen" id="progress-fields" class="border-t border-sky-400/10 px-4 pb-4 pt-3">
+                <div class="flex items-center gap-2">
+                  <label class="flex min-w-0 flex-1 flex-col gap-1">
+                    <input
+                      v-model.number="progressHours"
+                      type="number"
+                      min="0"
+                      inputmode="numeric"
+                      placeholder="0"
+                      class="h-11 w-full min-w-0 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                    />
+                    <span class="text-xs text-white/40">horas vistas</span>
+                  </label>
+                  <label class="flex min-w-0 flex-1 flex-col gap-1">
+                    <input
+                      v-model.number="progressMinutes"
+                      type="number"
+                      min="0"
+                      max="59"
+                      inputmode="numeric"
+                      placeholder="0"
+                      class="h-11 w-full min-w-0 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                    />
+                    <span class="text-xs text-white/40">minutos</span>
+                  </label>
+                  <label class="flex min-w-0 flex-1 flex-col gap-1">
+                    <input
+                      v-model.number="progressSeconds"
+                      type="number"
+                      min="0"
+                      max="59"
+                      inputmode="numeric"
+                      placeholder="0"
+                      class="h-11 w-full min-w-0 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                    />
+                    <span class="text-xs text-white/40">segundos</span>
+                  </label>
+                </div>
+                <label class="mt-3 flex flex-col gap-1.5">
+                  <input
+                    v-model.number="progressEpisodes"
+                    type="number"
+                    min="0"
+                    inputmode="numeric"
+                    placeholder="Ej. 30"
+                    class="h-11 w-full min-w-0 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                  />
+                  <span class="text-xs text-white/40">episodios vistos hasta hoy</span>
+                </label>
+              </div>
+            </div>
 
             <!-- Fechas (solo series: una peli se ve de una) -->
             <div v-if="isSeries" class="grid grid-cols-1 gap-4 sm:grid-cols-2">

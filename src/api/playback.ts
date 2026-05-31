@@ -4,6 +4,7 @@ import type {
   Forecast,
   Holiday,
   PaceSettings,
+  Progress,
   Retrospective,
   Weekday,
 } from './types'
@@ -33,6 +34,14 @@ export interface ForecastParams {
 }
 
 export type RetrospectiveParams = Omit<ForecastParams, 'startDate'>
+
+export interface ProgressParams {
+  asOf?: string                   // yyyy-MM-dd (default = hoy)
+  dailyMinutes?: number
+  dailyEpisodes?: number
+  skipWeekdays?: string           // CSV
+  skipHolidays?: boolean
+}
 
 export const playbackApi = {
   // --- Ritmo (pace settings) ---
@@ -91,6 +100,14 @@ export const playbackApi = {
   ) => {
     const { data } = await client.get<{ data: Retrospective }>(
       `/watchlists/${watchlistId}/items/${itemId}/retrospective`,
+      { params }
+    )
+    return data.data
+  },
+
+  progress: async (watchlistId: string, itemId: string, params: ProgressParams = {}) => {
+    const { data } = await client.get<{ data: Progress }>(
+      `/watchlists/${watchlistId}/items/${itemId}/progress`,
       { params }
     )
     return data.data

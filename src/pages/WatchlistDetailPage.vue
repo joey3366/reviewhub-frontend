@@ -5,7 +5,9 @@ import type { Watchlist, WatchlistItem } from '@/api/types'
 import { watchlistsApi } from '@/api/watchlists'
 import ItemTrackingModal from '@/components/watchlists/ItemTrackingModal.vue'
 import ForecastModal from '@/components/watchlists/ForecastModal.vue'
+import ProgressModal from '@/components/watchlists/ProgressModal.vue'
 import RetrospectiveModal from '@/components/watchlists/RetrospectiveModal.vue'
+import IncludesManagerModal from '@/components/watchlists/IncludesManagerModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,6 +26,15 @@ const trackingItem = ref<WatchlistItem | null>(null)
 const forecastItem = ref<WatchlistItem | null>(null)
 // Modal de retrospectiva. null = cerrado.
 const retroItem = ref<WatchlistItem | null>(null)
+// Modal de "¿cómo voy?" (in-flight). null = cerrado.
+const progressItem = ref<WatchlistItem | null>(null)
+// Modal de gestión de listas incluidas.
+const includesOpen = ref(false)
+
+// Un item es heredado si vino con `viaWatchlistId` (no es propio del watchlist).
+function isInherited(item: WatchlistItem): boolean {
+  return !!item.viaWatchlistId
+}
 
 const items = computed(() => watchlist.value?.items ?? [])
 
@@ -82,10 +93,13 @@ watch(
 
 const dragItemIndex = ref<number | null>(null)
 function onItemDragStart(index: number) {
+  // Los heredados no se reordenan (viven en su lista propia).
+  if (isInherited(orderedItems.value[index])) return
   dragItemIndex.value = index
 }
 function onItemDragEnter(index: number) {
   if (dragItemIndex.value === null || dragItemIndex.value === index) return
+  if (isInherited(orderedItems.value[index])) return
   const arr = [...orderedItems.value]
   const [moved] = arr.splice(dragItemIndex.value, 1)
   arr.splice(index, 0, moved)
@@ -93,13 +107,14 @@ function onItemDragEnter(index: number) {
   dragItemIndex.value = index
 }
 async function onItemDragEnd() {
+  if (dragItemIndex.value === null) return
   dragItemIndex.value = null
   if (!watchlist.value) return
   try {
-    await watchlistsApi.reorderItems(
-      watchlist.value.id,
-      orderedItems.value.map((it) => it.id)
-    )
+    // Solo persistimos el orden de los propios: el backend ignora ids ajenos,
+    // pero filtramos acá igual por claridad.
+    const ownIds = orderedItems.value.filter((it) => !isInherited(it)).map((it) => it.id)
+    await watchlistsApi.reorderItems(watchlist.value.id, ownIds)
   } catch (e) {
     actionError.value = 'No se pudo guardar el orden.'
     console.error(e)
@@ -193,9 +208,11 @@ function hasTracking(item: WatchlistItem) {
     !!item.finishedAt
   )
 }
-// Pronóstico y retrospectiva son solo para series: una peli se ve de una.
+// Pronóstico/retrospectiva/progreso: solo en items PROPIOS — los heredados se
+// gestionan desde su lista original (donde sí pertenece el itemId al watchlist).
 function canForecast(item: WatchlistItem) {
   return (
+    !isInherited(item) &&
     item.content?.type === 'series' &&
     (item.durationSeconds > 0 || (item.episodesWatched ?? 0) > 0)
   )
@@ -203,12 +220,27 @@ function canForecast(item: WatchlistItem) {
 function openForecast(item: WatchlistItem) {
   forecastItem.value = item
 }
-// Hay retrospectiva si es serie y ya marcaste inicio y fin (terminada).
 function canRetrospect(item: WatchlistItem) {
-  return item.content?.type === 'series' && !!item.startedAt && !!item.finishedAt
+  return (
+    !isInherited(item) &&
+    item.content?.type === 'series' &&
+    !!item.startedAt &&
+    !!item.finishedAt
+  )
 }
 function openRetro(item: WatchlistItem) {
   retroItem.value = item
+}
+function canProgress(item: WatchlistItem) {
+  return (
+    !isInherited(item) &&
+    item.content?.type === 'series' &&
+    !!item.startedAt &&
+    !item.finishedAt
+  )
+}
+function openProgress(item: WatchlistItem) {
+  progressItem.value = item
 }
 
 function goBack() {
@@ -293,6 +325,24 @@ watch(id, loadWatchlist, { immediate: true })
               <span class="text-xs font-medium uppercase tracking-wide text-white/50">Total visto</span>
               <span class="text-base font-bold tabular-nums text-amber-300">{{ totalWatchedLabel }}</span>
             </span>
+            <!-- Listas incluidas (solo dueño): includedLists viene undefined si no es tuya -->
+            <button
+              v-if="watchlist.includedLists !== undefined"
+              type="button"
+              class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/80 transition-colors hover:border-amber-400/40 hover:bg-amber-400/[0.06] hover:text-amber-300"
+              @click="includesOpen = true"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                <path d="M4 7h6l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2" />
+              </svg>
+              Listas incluidas
+              <span
+                v-if="watchlist.includedLists.length > 0"
+                class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400/20 px-1.5 text-[10px] font-bold text-amber-300"
+              >
+                {{ watchlist.includedLists.length }}
+              </span>
+            </button>
           </div>
         </header>
 
@@ -320,9 +370,12 @@ watch(id, loadWatchlist, { immediate: true })
           <div
             v-for="(item, index) in orderedItems"
             :key="item.id"
-            draggable="true"
-            class="group flex cursor-grab flex-col gap-2.5 transition-all active:cursor-grabbing"
-            :class="dragItemIndex === index ? 'scale-95 opacity-50' : ''"
+            :draggable="!isInherited(item)"
+            class="group flex flex-col gap-2.5 transition-all"
+            :class="[
+              isInherited(item) ? 'cursor-default' : 'cursor-grab active:cursor-grabbing',
+              dragItemIndex === index ? 'scale-95 opacity-50' : '',
+            ]"
             @dragstart="onItemDragStart(index)"
             @dragenter.prevent="onItemDragEnter(index)"
             @dragover.prevent
@@ -342,8 +395,9 @@ watch(id, loadWatchlist, { immediate: true })
                   {{ item.content?.title }}
                 </span>
               </button>
-              <!-- Seguimiento -->
+              <!-- Seguimiento (solo en propios; los heredados se editan desde su lista) -->
               <button
+                v-if="!isInherited(item)"
                 type="button"
                 class="absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 opacity-0 backdrop-blur-sm transition-opacity hover:bg-amber-500/80 hover:text-black group-hover:opacity-100"
                 :class="hasTracking(item) ? 'text-amber-300 opacity-100' : 'text-white/90'"
@@ -356,8 +410,9 @@ watch(id, loadWatchlist, { immediate: true })
                   <path d="M12 7v5l3 2" />
                 </svg>
               </button>
-              <!-- Quitar -->
+              <!-- Quitar (solo en propios) -->
               <button
+                v-if="!isInherited(item)"
                 type="button"
                 class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white/90 opacity-0 backdrop-blur-sm transition-opacity hover:bg-red-500/80 group-hover:opacity-100 disabled:opacity-50"
                 :disabled="removingId === item.id"
@@ -370,6 +425,17 @@ watch(id, loadWatchlist, { immediate: true })
                 </svg>
                 <span v-else class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
               </button>
+              <!-- Badge heredado (esquina sup-derecha, siempre visible) -->
+              <span
+                v-if="isInherited(item)"
+                class="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/70 px-2 py-1 text-[10px] font-medium text-amber-200/90 backdrop-blur-sm"
+                :title="`Se gestiona desde la lista &quot;${item.viaWatchlistName}&quot;`"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                  <path d="M4 7h6l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2" />
+                </svg>
+                {{ item.viaWatchlistName }}
+              </span>
             </div>
 
             <div class="flex flex-col gap-0.5">
@@ -407,9 +473,9 @@ watch(id, loadWatchlist, { immediate: true })
                   viendo
                 </span>
               </p>
-              <!-- Pronóstico / Retrospectiva -->
+              <!-- Pronóstico / ¿Cómo voy? / Retrospectiva -->
               <div
-                v-if="canForecast(item) || canRetrospect(item)"
+                v-if="canForecast(item) || canProgress(item) || canRetrospect(item)"
                 class="mt-1 flex flex-wrap gap-x-3 gap-y-1"
               >
                 <button
@@ -425,9 +491,21 @@ watch(id, loadWatchlist, { immediate: true })
                   Pronóstico
                 </button>
                 <button
-                  v-if="canRetrospect(item)"
+                  v-if="canProgress(item)"
                   type="button"
                   class="inline-flex items-center gap-1 text-xs font-medium text-sky-300/80 transition-colors hover:text-sky-300"
+                  @click="openProgress(item)"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                    <path d="M22 12A10 10 0 1 1 12 2" />
+                    <path d="M22 4 12 14.01l-3-3" />
+                  </svg>
+                  ¿Cómo voy?
+                </button>
+                <button
+                  v-if="canRetrospect(item)"
+                  type="button"
+                  class="inline-flex items-center gap-1 text-xs font-medium text-emerald-300/80 transition-colors hover:text-emerald-300"
                   @click="openRetro(item)"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
@@ -458,11 +536,25 @@ watch(id, loadWatchlist, { immediate: true })
       @close="forecastItem = null"
     />
 
+    <ProgressModal
+      :open="!!progressItem"
+      :watchlist-id="watchlist?.id ?? ''"
+      :item="progressItem"
+      @close="progressItem = null"
+    />
+
     <RetrospectiveModal
       :open="!!retroItem"
       :watchlist-id="watchlist?.id ?? ''"
       :item="retroItem"
       @close="retroItem = null"
+    />
+
+    <IncludesManagerModal
+      :open="includesOpen"
+      :watchlist="watchlist"
+      @close="includesOpen = false"
+      @changed="loadWatchlist"
     />
   </div>
 </template>
