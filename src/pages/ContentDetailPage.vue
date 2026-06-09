@@ -10,6 +10,7 @@ import ReviewItem from '@/components/content/ReviewItem.vue'
 import ReviewModal from '@/components/content/ReviewModal.vue'
 import PaginationControls from '@/components/PaginationControls.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
+import ConfirmModal from '@/components/ui/ConfirmModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -38,6 +39,7 @@ const editingReview = ref<Review | null>(null)
 const presetRating = ref<number | undefined>(undefined)
 const deletingId = ref<string | null>(null)
 const actionError = ref<string | null>(null)
+const reviewToDelete = ref<Review | null>(null)
 
 const myReview = computed(() => {
   if (!auth.user) return null
@@ -144,17 +146,23 @@ async function handleSuccess() {
   await Promise.all([loadReviews(), loadContent()])
 }
 
-async function handleDelete(review: Review) {
-  const confirmed = window.confirm('¿Borrar esta reseña? No se puede deshacer.')
-  if (!confirmed) return
+function handleDelete(review: Review) {
+  reviewToDelete.value = review
+}
+
+async function confirmDeleteReview() {
+  const review = reviewToDelete.value
+  if (!review) return
   deletingId.value = review.id
   actionError.value = null
   try {
     await reviewsApi.destroy(review.id)
+    reviewToDelete.value = null
     await Promise.all([loadReviews(), loadContent()])
   } catch (e) {
     console.error(e)
     actionError.value = 'No pudimos borrar la reseña. Intentá de nuevo.'
+    reviewToDelete.value = null
   } finally {
     deletingId.value = null
   }
@@ -360,6 +368,17 @@ function goHome() {
       :preset-rating="presetRating"
       @close="closeModal"
       @success="handleSuccess"
+    />
+
+    <ConfirmModal
+      :open="reviewToDelete !== null"
+      title="Borrar reseña"
+      message="¿Borrar esta reseña? No se puede deshacer."
+      confirm-label="Borrar"
+      variant="destructive"
+      :loading="deletingId !== null"
+      @close="reviewToDelete = null"
+      @confirm="confirmDeleteReview"
     />
   </div>
 </template>

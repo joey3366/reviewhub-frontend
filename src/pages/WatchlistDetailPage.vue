@@ -9,6 +9,7 @@ import ProgressModal from '@/components/watchlists/ProgressModal.vue'
 import RetrospectiveModal from '@/components/watchlists/RetrospectiveModal.vue'
 import IncludesManagerModal from '@/components/watchlists/IncludesManagerModal.vue'
 import ListStatsModal from '@/components/watchlists/ListStatsModal.vue'
+import ConfirmModal from '@/components/ui/ConfirmModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -33,6 +34,8 @@ const progressItem = ref<WatchlistItem | null>(null)
 const includesOpen = ref(false)
 // Modal de estadísticas agregadas de la lista.
 const statsOpen = ref(false)
+// Item pendiente de confirmación de quitar.
+const itemToRemove = ref<WatchlistItem | null>(null)
 
 // Un item es heredado si vino con `viaWatchlistId` (no es propio del watchlist).
 function isInherited(item: WatchlistItem): boolean {
@@ -154,19 +157,29 @@ function goToContent(item: WatchlistItem) {
   if (item.content?.slug) router.push(`/contents/${item.content.slug}`)
 }
 
-async function removeItem(item: WatchlistItem) {
+function removeItem(item: WatchlistItem) {
+  itemToRemove.value = item
+}
+const removeMessage = computed(() => {
+  const it = itemToRemove.value
+  const title = it?.content?.title ?? 'este título'
+  return `¿Quitar "${title}" de la lista?`
+})
+async function confirmRemoveItem() {
   if (!watchlist.value) return
-  const title = item.content?.title ?? 'este título'
-  if (!window.confirm(`¿Quitar "${title}" de la lista?`)) return
+  const item = itemToRemove.value
+  if (!item) return
   removingId.value = item.id
   actionError.value = null
   try {
     await watchlistsApi.removeItem(watchlist.value.id, item.id)
+    itemToRemove.value = null
     // Refrescamos para recalcular conteo y duración total del backend.
     watchlist.value = await watchlistsApi.show(watchlist.value.id)
   } catch (e) {
     actionError.value = 'No se pudo quitar el título.'
     console.error(e)
+    itemToRemove.value = null
   } finally {
     removingId.value = null
   }
@@ -591,6 +604,17 @@ watch(id, loadWatchlist, { immediate: true })
       :watchlist-id="watchlist?.id ?? ''"
       :watchlist-name="watchlist?.name ?? ''"
       @close="statsOpen = false"
+    />
+
+    <ConfirmModal
+      :open="itemToRemove !== null"
+      title="Quitar de la lista"
+      :message="removeMessage"
+      confirm-label="Quitar"
+      variant="destructive"
+      :loading="removingId !== null"
+      @close="itemToRemove = null"
+      @confirm="confirmRemoveItem"
     />
   </div>
 </template>

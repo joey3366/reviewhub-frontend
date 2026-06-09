@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import type { Content, Paginated } from '@/api/types'
 import { contentApi } from '@/api/content'
 import { adminApi } from '@/api/admin'
+import ConfirmModal from '@/components/ui/ConfirmModal.vue'
 
 const router = useRouter()
 
@@ -16,6 +17,7 @@ const typeFilter = ref<'all' | 'movie' | 'series'>('all')
 const loading = ref(false)
 const error = ref<string | null>(null)
 const deletingId = ref<string | null>(null)
+const toDelete = ref<Content | null>(null)
 const data = ref<Paginated<Content> | null>(null)
 
 const items = computed(() => data.value?.data ?? [])
@@ -56,16 +58,24 @@ function goEdit(c: Content) {
   router.push({ name: 'admin-content-edit', params: { slug: c.slug } })
 }
 
-async function removeContent(c: Content) {
+function askDelete(c: Content) {
+  toDelete.value = c
+}
+const deleteMessage = computed(() => {
+  const c = toDelete.value
+  if (!c) return ''
   const label = c.type === 'movie' ? 'esta película' : 'esta serie'
-  const sure = window.confirm(
-    `¿Eliminar "${c.title}"? Esto borra ${label}, sus reseñas y la quita de las listas. No se puede deshacer.`
-  )
-  if (!sure) return
+  return `¿Eliminar "${c.title}"? Esto borra ${label}, sus reseñas y la quita de las listas. No se puede deshacer.`
+})
+
+async function confirmDelete() {
+  const c = toDelete.value
+  if (!c) return
   deletingId.value = c.id
   try {
     if (c.type === 'movie') await adminApi.deleteMovie(c.id)
     else await adminApi.deleteSeries(c.id)
+    toDelete.value = null
     await load()
   } catch (e) {
     if (axios.isAxiosError(e)) {
@@ -76,6 +86,7 @@ async function removeContent(c: Content) {
       error.value = 'No se pudo eliminar.'
     }
     console.error(e)
+    toDelete.value = null
   } finally {
     deletingId.value = null
   }
@@ -220,7 +231,7 @@ load()
                   type="button"
                   class="rounded-md px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
                   :disabled="deletingId === c.id"
-                  @click="removeContent(c)"
+                  @click="askDelete(c)"
                 >
                   <span v-if="deletingId === c.id">Borrando…</span>
                   <span v-else>Eliminar</span>
@@ -231,6 +242,17 @@ load()
         </tbody>
       </table>
     </div>
+
+    <ConfirmModal
+      :open="toDelete !== null"
+      title="Eliminar contenido"
+      :message="deleteMessage"
+      confirm-label="Eliminar"
+      variant="destructive"
+      :loading="deletingId !== null"
+      @close="toDelete = null"
+      @confirm="confirmDelete"
+    />
 
     <!-- Paginación -->
     <div v-if="meta && meta.lastPage > 1" class="mt-4 flex items-center justify-between text-sm text-ink-muted">

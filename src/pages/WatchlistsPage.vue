@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { Watchlist } from '@/api/types'
 import { watchlistsApi } from '@/api/watchlists'
+import ConfirmModal from '@/components/ui/ConfirmModal.vue'
 
 const router = useRouter()
 
@@ -230,18 +231,30 @@ async function toggleVisibility(list: Watchlist) {
 }
 
 // --- Borrar ---
-async function removeList(list: Watchlist) {
+const listToDelete = ref<Watchlist | null>(null)
+
+function removeList(list: Watchlist) {
   menuOpenId.value = null
-  if (!window.confirm(`¿Borrar la lista "${list.name}"? No se puede deshacer.`)) return
+  listToDelete.value = list
+}
+const removeMessage = computed(() => {
+  const l = listToDelete.value
+  return l ? `¿Borrar la lista "${l.name}"? No se puede deshacer.` : ''
+})
+async function confirmRemoveList() {
+  const list = listToDelete.value
+  if (!list) return
   busyId.value = list.id
   actionError.value = null
   try {
     await watchlistsApi.destroy(list.id)
     lists.value = lists.value.filter((l) => l.id !== list.id)
+    listToDelete.value = null
     persistOrder()
   } catch (e) {
     actionError.value = 'No se pudo borrar la lista.'
     console.error(e)
+    listToDelete.value = null
   } finally {
     busyId.value = null
   }
@@ -571,6 +584,17 @@ onMounted(loadLists)
         <span class="text-amber-300/60">”</span>
       </p>
     </div>
+
+    <ConfirmModal
+      :open="listToDelete !== null"
+      title="Borrar lista"
+      :message="removeMessage"
+      confirm-label="Borrar"
+      variant="destructive"
+      :loading="busyId !== null"
+      @close="listToDelete = null"
+      @confirm="confirmRemoveList"
+    />
   </div>
 </template>
 
