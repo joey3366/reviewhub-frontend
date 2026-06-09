@@ -98,6 +98,8 @@ export interface WatchlistItem {
   episodesWatched: number | null   // episodios TOTALES de la serie
   durationProgressSeconds: number  // cuánto llevás visto (in-flight)
   episodesProgress: number | null  // cuántos episodios llevás vistos
+  paceMinutes: number | null       // override de ritmo en min/día para ESTA serie
+  paceEpisodes: number | null      // override de ritmo en eps/día para ESTA serie
   startedAt: string | null         // yyyy-MM-dd
   finishedAt: string | null        // yyyy-MM-dd
   daysElapsed: number | null       // calculado por el backend
@@ -170,6 +172,7 @@ export interface ForecastPace {
   dailyEpisodes: number | null
   skipWeekdays: Weekday[]
   skipHolidays: boolean
+  customForItem?: boolean         // true si vino del override del item (no del global)
 }
 
 /** Pronóstico: "si arrancás tal día, terminás tal día". */

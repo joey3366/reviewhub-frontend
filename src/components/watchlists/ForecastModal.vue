@@ -78,9 +78,10 @@ const dataMissing = computed(() => guidance.value !== null)
 const paceLabel = computed(() => {
   const f = forecast.value
   if (!f) return ''
-  return f.mode === 'time'
+  const base = f.mode === 'time'
     ? `${f.pace.dailyMinutes} min por día`
     : `${f.pace.dailyEpisodes} ${f.pace.dailyEpisodes === 1 ? 'episodio' : 'episodios'} por día`
+  return f.pace.customForItem ? `${base} (ritmo propio de esta serie)` : base
 })
 
 async function fetchForecast() {

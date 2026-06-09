@@ -28,13 +28,18 @@ const progressHours = ref<number | null>(null)
 const progressMinutes = ref<number | null>(null)
 const progressSeconds = ref<number | null>(null)
 const progressEpisodes = ref<number | null>(null)
+// "Ritmo personalizado" = override del ritmo global SOLO para esta serie.
+// Útil cuando una tiene episodios largos y otra cortos: 3 eps/día no son
+// lo mismo si dura 20 min vs 1 hora.
+const paceMinutes = ref<number | null>(null)
+const paceEpisodes = ref<number | null>(null)
 const startedAt = ref('')
 const finishedAt = ref('')
 const saving = ref(false)
 const error = ref<string | null>(null)
-// El bloque "Tu progreso hasta hoy" arranca abierto solo si ya hay progreso
-// cargado, para no recargar el modal en el primer uso.
+// Los desplegables arrancan abiertos solo si ya hay algo cargado.
 const progressOpen = ref(false)
+const paceOpen = ref(false)
 
 const isSeries = computed(() => props.item?.content?.type === 'series')
 const title = computed(() => props.item?.content?.title ?? 'este título')
@@ -56,10 +61,24 @@ function resetFromItem() {
   progressMinutes.value = psec > 0 ? Math.floor((psec % 3600) / 60) : null
   progressSeconds.value = psec > 0 ? psec % 60 : null
   progressEpisodes.value = props.item?.episodesProgress ?? null
+  paceMinutes.value = props.item?.paceMinutes ?? null
+  paceEpisodes.value = props.item?.paceEpisodes ?? null
   startedAt.value = props.item?.startedAt ?? ''
   finishedAt.value = props.item?.finishedAt ?? ''
   progressOpen.value = psec > 0 || (props.item?.episodesProgress ?? 0) > 0
+  paceOpen.value = (props.item?.paceMinutes ?? 0) > 0 || (props.item?.paceEpisodes ?? 0) > 0
 }
+
+// Resumen corto del ritmo personalizado para el header colapsado.
+const paceSummary = computed(() => {
+  const m = fieldValue(paceMinutes.value)
+  const e = fieldValue(paceEpisodes.value)
+  if (!m && !e) return null
+  const parts: string[] = []
+  if (m) parts.push(`${m} min/día`)
+  if (e) parts.push(`${e} ep/día`)
+  return parts.join(' · ')
+})
 
 // Resumen corto del progreso para mostrar en el header colapsado.
 const progressSummary = computed(() => {
@@ -111,11 +130,16 @@ async function save() {
   }
   saving.value = true
   try {
+    // Pace override solo aplica a series; en pelis lo dejamos null.
+    const pm = isSeries.value ? fieldValue(paceMinutes.value) : null
+    const pe = isSeries.value ? fieldValue(paceEpisodes.value) : null
     await watchlistsApi.updateItem(props.watchlistId, props.item.id, {
       durationSeconds,
       episodesWatched: eps,
       durationProgressSeconds,
       episodesProgress: progressEps,
+      paceMinutes: pm,
+      paceEpisodes: pe,
       startedAt: start,
       finishedAt: finish,
     })
@@ -347,6 +371,63 @@ onBeforeUnmount(() => {
                   />
                   <span class="text-xs text-white/40">episodios vistos hasta hoy</span>
                 </label>
+              </div>
+            </div>
+
+            <!-- Ritmo personalizado para ESTA serie (solo series) — desplegable -->
+            <div v-if="isSeries" class="overflow-hidden rounded-lg border border-violet-400/20 bg-violet-400/[0.04]">
+              <button
+                type="button"
+                class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-violet-400/[0.06]"
+                :aria-expanded="paceOpen"
+                aria-controls="pace-fields"
+                @click="paceOpen = !paceOpen"
+              >
+                <span class="flex flex-col gap-0.5">
+                  <span class="text-sm font-medium text-violet-200">Ritmo para esta serie</span>
+                  <span class="text-xs text-violet-200/60">
+                    <template v-if="paceSummary">{{ paceSummary }}</template>
+                    <template v-else>opcional · sobrescribe tu ritmo global solo acá</template>
+                  </span>
+                </span>
+                <svg
+                  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                  class="h-4 w-4 shrink-0 text-violet-200/70 transition-transform"
+                  :class="paceOpen ? 'rotate-180' : ''"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+              <div v-if="paceOpen" id="pace-fields" class="border-t border-violet-400/10 px-4 pb-4 pt-3">
+                <p class="mb-3 text-xs text-violet-200/70">
+                  Usalo cuando los episodios son muy distintos al promedio (ej. 1h vs 20min).
+                  Si seteás minutos, el pronóstico de esta serie usa tiempo. Si dejás todo vacío,
+                  vuelve al ritmo global de "Mi ritmo".
+                </p>
+                <div class="grid grid-cols-2 gap-3">
+                  <label class="flex flex-col gap-1.5">
+                    <input
+                      v-model.number="paceMinutes"
+                      type="number"
+                      min="1"
+                      inputmode="numeric"
+                      placeholder="Ej. 60"
+                      class="h-11 w-full min-w-0 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                    />
+                    <span class="text-xs text-white/40">min por día</span>
+                  </label>
+                  <label class="flex flex-col gap-1.5">
+                    <input
+                      v-model.number="paceEpisodes"
+                      type="number"
+                      min="1"
+                      inputmode="numeric"
+                      placeholder="Ej. 2"
+                      class="h-11 w-full min-w-0 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                    />
+                    <span class="text-xs text-white/40">eps por día</span>
+                  </label>
+                </div>
               </div>
             </div>
 

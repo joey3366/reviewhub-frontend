@@ -14,6 +14,8 @@ export interface CreateWatchlistItemInput {
   episodesWatched?: number | null   // episodios TOTALES (alimenta el pronóstico)
   durationProgressSeconds?: number  // cuánto llevás visto (in-flight)
   episodesProgress?: number | null  // cuántos episodios llevás vistos
+  paceMinutes?: number | null       // override min/día solo para esta serie
+  paceEpisodes?: number | null      // override eps/día solo para esta serie
   startedAt?: string | null         // yyyy-MM-dd
   finishedAt?: string | null        // yyyy-MM-dd
 }

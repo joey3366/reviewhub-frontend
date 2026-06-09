@@ -54,9 +54,10 @@ const verdict = computed(() => {
 const paceLabel = computed(() => {
   const r = retro.value
   if (!r) return ''
-  return r.mode === 'time'
+  const base = r.mode === 'time'
     ? `${r.pace.dailyMinutes} min por día`
     : `${r.pace.dailyEpisodes} ${r.pace.dailyEpisodes === 1 ? 'episodio' : 'episodios'} por día`
+  return r.pace.customForItem ? `${base} (ritmo propio de esta serie)` : base
 })
 
 async function fetchRetrospective() {

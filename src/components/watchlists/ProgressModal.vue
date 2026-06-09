@@ -51,9 +51,10 @@ const verdict = computed(() => {
 const paceLabel = computed(() => {
   const p = progress.value
   if (!p) return ''
-  return p.mode === 'time'
+  const base = p.mode === 'time'
     ? `${p.pace.dailyMinutes} min por día`
     : `${p.pace.dailyEpisodes} ${p.pace.dailyEpisodes === 1 ? 'episodio' : 'episodios'} por día`
+  return p.pace.customForItem ? `${base} (ritmo propio de esta serie)` : base
 })
 
 // Formatea las unidades del modo en algo humano: "120 min" o "8 episodios".
