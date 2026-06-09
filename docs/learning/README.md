@@ -36,6 +36,7 @@ tooling y UX que tomamos en el camino.
 | 11 | [Playback](11-playback.md) | Ritmo + días libres, seguimiento por título (duración con segundos, episodios, fechas solo-series), pronóstico ("terminás el X") y retrospectiva; el footgun de `v-model` + `type="number"`, y el acoplamiento modo↔ritmo |
 | 12 | [Progreso, anidación y tabs](12-progreso-anidacion-y-tabs.md) | "¿Cómo voy?" (mid-flight check con campo nuevo en el item + endpoint dedicado), listas anidadas (many-to-many auto-referencial + dedupe BFS + anti-ciclo DFS) y tabs por tipo (subqueries raw + localStorage); bugs de Luxon/MySQL DATETIME y `<select>` en dark |
 | 13 | [Ritmo por título y stats por lista](13-ritmo-por-titulo-y-stats-por-lista.md) | Override de `paceMinutes`/`paceEpisodes` por item (precedencia query > item > global, `customForItem` para la UI) y endpoint agregador `/watchlists/:id/stats` que reusa `findByIdWithIncluded` + `walkCalendar` para devolver ventana real, totales, ritmo efectivo y comparación contra el apuntado |
+| 14 | [Admin dashboard de contents](14-admin-dashboard-contents.md) | CRUD completo del catálogo desde la UI: `PATCH`/`DELETE` admin-only en backend (validators `.optional() + .nullable()`, `sync()` para géneros, cascada por FK), router guard `requiresAdmin`, listado paginado con filtros y form único create/edit por radio movie/series. Reemplazo de las 4 carátulas placeholder vía TMDb + weserv proxy |
 
 ## Cómo usar estos docs
 

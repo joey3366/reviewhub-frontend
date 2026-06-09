@@ -43,6 +43,24 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/PacePage.vue'),
     meta: { requiresAuth: true, fullBleed: true },
   },
+  {
+    path: '/admin/contents',
+    name: 'admin-contents',
+    component: () => import('@/pages/AdminContentsPage.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: '/admin/contents/new',
+    name: 'admin-content-new',
+    component: () => import('@/pages/AdminContentFormPage.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: '/admin/contents/:slug/edit',
+    name: 'admin-content-edit',
+    component: () => import('@/pages/AdminContentFormPage.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
 ]
 
 const router = createRouter({

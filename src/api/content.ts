@@ -6,6 +6,9 @@ export interface ContentListParams {
   perPage?: number
   genre?: string
   sort?: 'recent' | 'top'
+  type?: 'movie' | 'series'
+  q?: string                          // búsqueda full-text (title/originalTitle/synopsis)
+  year?: number
 }
 
 export const contentApi = {
