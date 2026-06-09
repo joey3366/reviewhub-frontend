@@ -11,6 +11,7 @@ import {
   type UpdateMovieInput,
   type UpdateSeriesInput,
 } from '@/api/admin'
+import ImageUploadInput from '@/components/ui/ImageUploadInput.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -346,37 +347,25 @@ watch(type, (next, prev) => {
         </label>
       </div>
 
-      <!-- Carátulas + preview -->
+      <!-- Carátulas: upload directo a Cloudinary o pegar URL externa -->
       <div class="rounded-lg border border-outline bg-surface p-4">
-        <p class="mb-3 text-xs font-medium uppercase tracking-wide text-ink-muted">Carátulas (URLs)</p>
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <label class="flex flex-col gap-1.5">
-            <span class="text-sm font-medium text-ink">Poster (vertical, 2:3)</span>
-            <input
-              v-model="posterUrl"
-              type="url"
-              placeholder="https://…"
-              class="h-10 rounded-md border border-outline bg-white px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-            <div class="h-40 w-28 self-start overflow-hidden rounded border border-outline bg-surface-subtle">
-              <img v-if="posterUrl" :src="posterUrl" alt="Preview poster" class="h-full w-full object-cover" />
-            </div>
-          </label>
-          <label class="flex flex-col gap-1.5">
-            <span class="text-sm font-medium text-ink">Backdrop (horizontal, 16:9)</span>
-            <input
-              v-model="backdropUrl"
-              type="url"
-              placeholder="https://…"
-              class="h-10 rounded-md border border-outline bg-white px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-            <div class="aspect-video w-full overflow-hidden rounded border border-outline bg-surface-subtle">
-              <img v-if="backdropUrl" :src="backdropUrl" alt="Preview backdrop" class="h-full w-full object-cover" />
-            </div>
-          </label>
+        <p class="mb-3 text-xs font-medium uppercase tracking-wide text-ink-muted">Carátulas</p>
+        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <ImageUploadInput
+            v-model="posterUrl"
+            label="Poster (vertical, 2:3)"
+            folder="reviewhub/covers/posters"
+            aspect-class="aspect-[2/3]"
+          />
+          <ImageUploadInput
+            v-model="backdropUrl"
+            label="Backdrop (horizontal, 16:9)"
+            folder="reviewhub/covers/backdrops"
+            aspect-class="aspect-video"
+          />
         </div>
         <p class="mt-3 text-xs text-ink-subtle">
-          Tip: si la URL no permite carga cross-origin podés envolverla con weserv:
+          Tip: si la URL externa no permite carga cross-origin podés envolverla con weserv:
           <code class="rounded bg-surface-subtle px-1 text-ink">https://wsrv.nl/?url=…</code>
         </p>
       </div>

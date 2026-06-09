@@ -369,9 +369,126 @@ La fase 5 cierra el CRUD del catálogo. Ahora podés:
 - Listado admin de users / reviews / watchlists (los endpoints
   existen pero sin UI). Si la usuaria lo necesita, es un agregado fácil
   reutilizando el patrón de `AdminContentsPage`.
-- Upload de imágenes (URLs externas únicamente). Si en el futuro
-  querés subir archivos, agregás un `POST /admin/uploads` que devuelva
-  una URL y la pegás en el form.
+
+---
+
+## Parte 4 — Upload de imágenes (Cloudinary unsigned)
+
+Después del cierre inicial de la fase 5 la usuaria pidió que el form
+admin permita **subir archivos**, no solo pegar URLs externas. Como el
+backend va a vivir en un free tier (Railway/Render/Fly.io) donde el
+filesystem es efímero, las imágenes tienen que vivir en un servicio
+externo.
+
+### 4.1 Por qué Cloudinary unsigned
+
+Cloudinary free tier da 25 GB de storage + 25 GB de bandwidth/mes (más
+que suficiente para uso personal). Los **unsigned uploads** son la
+forma más simple: el frontend POSTea directo a Cloudinary, **el backend
+ni se entera** — solo recibe la URL final como string igual que antes.
+
+Las restricciones (tipos de archivo permitidos, tamaño máximo, carpeta
+destino) viven en el **upload preset** del dashboard de Cloudinary,
+no en código. Si querés cambiar las reglas, las tocás allá.
+
+### 4.2 Setup
+
+1. Crear cuenta en https://cloudinary.com/users/register_free.
+2. En el dashboard, anotar el **cloud name** (arriba a la izquierda).
+3. Settings → Upload → Upload presets → Add upload preset:
+   - **Signing Mode: Unsigned** (sin esto el frontend no puede subir).
+   - Folder: `reviewhub/covers`.
+   - Allowed formats: `jpg, jpeg, png, webp`.
+   - Max file size: 5 MB.
+4. En `frontend/.env.development`:
+   ```
+   VITE_CLOUDINARY_CLOUD_NAME=tu-cloud-name
+   VITE_CLOUDINARY_UPLOAD_PRESET=reviewhub_covers
+   ```
+
+> **Cuidado — `VITE_*` se compila al bundle.** Cualquier `VITE_*` queda
+> visible en el JS que descarga el browser. Para Cloudinary
+> unsigned está OK (cloud name y preset SON públicos por diseño). Para
+> secrets reales (DB password, API key privada) usás otra vía.
+
+### 4.3 `lib/cloudinary.ts`
+
+Cliente standalone (no usa axios, evita pasar por el interceptor de
+auth) que sube un `File` y devuelve la URL pública. Usa `XMLHttpRequest`
+en vez de `fetch` porque XHR expone progreso de upload:
+
+```ts
+const xhr = new XMLHttpRequest()
+xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`)
+xhr.upload.addEventListener('progress', (e) => {
+  if (e.lengthComputable && opts.onProgress) {
+    opts.onProgress(Math.round((e.loaded / e.total) * 100))
+  }
+})
+```
+
+Errores tipados: `CloudinaryNotConfiguredError` (falta env var) y
+`CloudinaryUploadError` (la API rechazó — preset mal, archivo muy
+grande, formato no permitido, etc.). El segundo extrae el mensaje del
+JSON de error de Cloudinary para mostrar algo útil.
+
+### 4.4 `<ImageUploadInput>` reusable
+
+`v-model` recibe y emite un **string** (la URL final). Esconde toda la
+complejidad detrás de:
+
+- **Drag-and-drop** sobre la zona vacía con aspect-ratio matcheado a la
+  carátula esperada (`aspect-[2/3]` para poster, `aspect-video` para
+  backdrop).
+- **Click para abrir file picker** (input hidden).
+- **Progress bar** mientras sube.
+- **Toggle "o pegá una URL externa"** — para los casos donde ya tenés
+  una URL (TMDb, IMDb, foto vieja). Cuando elegís ese modo, el
+  componente no toca Cloudinary, solo emite la URL que pegues.
+- **Preview con botones "Cambiar" y "Quitar"** cuando hay valor cargado.
+- **Validación cliente** del tamaño (5 MB), con error inline si te pasás.
+
+El padre (AdminContentFormPage) ya no maneja URLs como strings raw —
+solo `v-model` y olvidate:
+
+```html
+<ImageUploadInput
+  v-model="posterUrl"
+  label="Poster (vertical, 2:3)"
+  folder="reviewhub/covers/posters"
+  aspect-class="aspect-[2/3]"
+/>
+```
+
+### 4.5 Bonus — transformaciones via URL
+
+Cloudinary permite pedir resizes/crops cambiando la URL, sin reupload:
+
+```
+original: https://res.cloudinary.com/xxx/image/upload/v1/path.jpg
+500x750:  https://res.cloudinary.com/xxx/image/upload/w_500,h_750,c_fill/v1/path.jpg
+WebP:     https://res.cloudinary.com/xxx/image/upload/f_webp/v1/path.jpg
+combinada: w_500,h_750,c_fill,f_webp,q_auto
+```
+
+El helper `transform(url, 'w_500,h_750,c_fill')` de `lib/cloudinary.ts`
+hace la inserción. Si la URL no es de Cloudinary (ej. TMDb vieja), la
+devuelve tal cual — no rompe nada. Útil más adelante si en el detalle
+querés servir versiones optimizadas.
+
+### 4.6 Lo importante de la parte 4
+
+- **El backend no cambia nada.** Sigue recibiendo strings de URL. Eso
+  significa que las carátulas TMDb que cargaste manualmente conviven
+  con las subidas a Cloudinary sin tocar nada.
+- **Unsigned uploads = cero backend.** Es la forma más simple para un
+  free tier. Si en el futuro necesitás validar quién sube (workflows
+  de moderación), pasás a **signed uploads** y el backend firma la
+  petición — pero para admin único no hace falta.
+- **El preset es tu contrato de validación.** No pongas reglas
+  duplicadas en el frontend "por las dudas" — el preset es la fuente
+  de verdad. Si Cloudinary rechaza, el componente muestra el mensaje
+  tal cual viene.
 
 Próximo natural: **fase 6 (polish + tests + deploy)**, según el plan
 de `project_fase_status`.
