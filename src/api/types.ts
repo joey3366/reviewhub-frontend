@@ -208,6 +208,54 @@ export interface Progress {
   pace: ForecastPace
 }
 
+/**
+ * Stats agregadas de una lista entera (incluye items heredados de listas
+ * incluidas). Solo dueño. `status: 'empty'` cuando no hay ningún item con
+ * `startedAt` cargado — en ese caso todos los campos `*` opcionales vienen
+ * null y la UI debe mostrar el empty state.
+ */
+export interface ListStats {
+  status: 'ok' | 'empty'
+  itemsCount: number           // cuántos items contribuyen (con startedAt)
+  finishedCount: number        // de esos, cuántos terminaron
+  inFlightCount: number        // cuántos arrancaron pero no terminaron
+  inheritedCount: number       // de esos, cuántos vienen de listas incluidas
+  window: {
+    start: string              // yyyy-MM-dd (min de los startedAt)
+    end: string                // yyyy-MM-dd (max finishedAt, o hoy si hay in-flight)
+    endIsToday: boolean        // true cuando end = hoy porque hay in-flight
+    calendarDays: number       // días de calendario punta a punta
+    validDays: number          // descontando skipWeekdays + holidays del usuario
+    skippedDays: number
+  } | null
+  totals: {
+    durationSeconds: number    // suma de durationSeconds (finished) + durationProgress (in-flight)
+    durationFormatted: string  // "HH:MM:SS"
+    episodes: number           // idem para episodios
+  } | null
+  actualPace: {
+    minutesPerValidDay: number    // entero
+    episodesPerValidDay: number   // 2 decimales
+  } | null
+  targetPace: {                // del global "Mi ritmo"; null si nunca configuró
+    dailyMinutes: number | null
+    dailyEpisodes: number | null
+  } | null
+  comparison: {                // null si no hay target o no hay actual
+    minutesMultiplier: number | null    // actualMin/targetMin (1.0 = igual, 1.3 = 30% más rápido)
+    episodesMultiplier: number | null
+  } | null
+  contributingItems: Array<{
+    id: string
+    contentId: string
+    title: string
+    type: 'movie' | 'series'
+    startedAt: string          // yyyy-MM-dd
+    finishedAt: string | null  // null = in-flight
+    viaWatchlistName: string | null  // null si es propio del watchlist
+  }>
+}
+
 /** Retrospectiva: qué tan bien cumpliste el ritmo en algo ya terminado. */
 export interface Retrospective {
   mode: ForecastMode

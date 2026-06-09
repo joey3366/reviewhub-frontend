@@ -8,6 +8,7 @@ import ForecastModal from '@/components/watchlists/ForecastModal.vue'
 import ProgressModal from '@/components/watchlists/ProgressModal.vue'
 import RetrospectiveModal from '@/components/watchlists/RetrospectiveModal.vue'
 import IncludesManagerModal from '@/components/watchlists/IncludesManagerModal.vue'
+import ListStatsModal from '@/components/watchlists/ListStatsModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -30,6 +31,8 @@ const retroItem = ref<WatchlistItem | null>(null)
 const progressItem = ref<WatchlistItem | null>(null)
 // Modal de gestión de listas incluidas.
 const includesOpen = ref(false)
+// Modal de estadísticas agregadas de la lista.
+const statsOpen = ref(false)
 
 // Un item es heredado si vino con `viaWatchlistId` (no es propio del watchlist).
 function isInherited(item: WatchlistItem): boolean {
@@ -343,6 +346,18 @@ watch(id, loadWatchlist, { immediate: true })
                 {{ watchlist.includedLists.length }}
               </span>
             </button>
+            <!-- Estadísticas (solo dueño: lo mismo que includedLists, viene undefined si no es tuya) -->
+            <button
+              v-if="watchlist.includedLists !== undefined"
+              type="button"
+              class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/80 transition-colors hover:border-amber-400/40 hover:bg-amber-400/[0.06] hover:text-amber-300"
+              @click="statsOpen = true"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                <path d="M3 3v18h18M7 14l4-4 4 4 5-6" />
+              </svg>
+              Estadísticas
+            </button>
           </div>
         </header>
 
@@ -569,6 +584,13 @@ watch(id, loadWatchlist, { immediate: true })
       :watchlist="watchlist"
       @close="includesOpen = false"
       @changed="loadWatchlist"
+    />
+
+    <ListStatsModal
+      :open="statsOpen"
+      :watchlist-id="watchlist?.id ?? ''"
+      :watchlist-name="watchlist?.name ?? ''"
+      @close="statsOpen = false"
     />
   </div>
 </template>

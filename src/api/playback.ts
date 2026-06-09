@@ -3,6 +3,7 @@ import client from './client'
 import type {
   Forecast,
   Holiday,
+  ListStats,
   PaceSettings,
   Progress,
   Retrospective,
@@ -110,6 +111,16 @@ export const playbackApi = {
       `/watchlists/${watchlistId}/items/${itemId}/progress`,
       { params }
     )
+    return data.data
+  },
+
+  /**
+   * Stats agregadas de la lista (propios + heredados). Solo el dueño.
+   * Reusa el ritmo y los feriados del usuario; no acepta overrides porque
+   * aquí agregamos sobre toda la lista, no proyectamos.
+   */
+  listStats: async (watchlistId: string) => {
+    const { data } = await client.get<{ data: ListStats }>(`/watchlists/${watchlistId}/stats`)
     return data.data
   },
 }
