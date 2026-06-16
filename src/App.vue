@@ -2,6 +2,7 @@
 import { computed, watchEffect } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import NavBar from '@/components/layout/NavBar.vue'
+import ToastContainer from '@/components/ui/ToastContainer.vue'
 
 const route = useRoute()
 const isFullBleed = computed(() => route.meta.fullBleed === true)
@@ -17,5 +18,6 @@ watchEffect(() => {
     <main :class="isFullBleed ? '' : 'mx-auto max-w-7xl px-6 py-10'">
       <RouterView />
     </main>
+    <ToastContainer />
   </div>
 </template>

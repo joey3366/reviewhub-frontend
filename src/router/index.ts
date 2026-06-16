@@ -6,18 +6,19 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     name: 'home',
     component: () => import('@/pages/HomePage.vue'),
+    meta: { fullBleed: true },
   },
   {
     path: '/login',
     name: 'login',
     component: () => import('@/pages/LoginPage.vue'),
-    meta: { guest: true },
+    meta: { guest: true, fullBleed: true },
   },
   {
     path: '/signup',
     name: 'signup',
     component: () => import('@/pages/SignupPage.vue'),
-    meta: { guest: true },
+    meta: { guest: true, fullBleed: true },
   },
   {
     path: '/contents/:slug',
@@ -47,19 +48,19 @@ const routes: RouteRecordRaw[] = [
     path: '/admin/contents',
     name: 'admin-contents',
     component: () => import('@/pages/AdminContentsPage.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true },
+    meta: { requiresAuth: true, requiresAdmin: true, fullBleed: true },
   },
   {
     path: '/admin/contents/new',
     name: 'admin-content-new',
     component: () => import('@/pages/AdminContentFormPage.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true },
+    meta: { requiresAuth: true, requiresAdmin: true, fullBleed: true },
   },
   {
     path: '/admin/contents/:slug/edit',
     name: 'admin-content-edit',
     component: () => import('@/pages/AdminContentFormPage.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true },
+    meta: { requiresAuth: true, requiresAdmin: true, fullBleed: true },
   },
 ]
 

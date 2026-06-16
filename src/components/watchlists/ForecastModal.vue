@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { Forecast, WatchlistItem } from '@/api/types'
 import { playbackApi } from '@/api/playback'
+import DateField from '@/components/ui/DateField.vue'
 
 const props = defineProps<{
   open: boolean
@@ -189,14 +190,10 @@ onBeforeUnmount(() => {
           </header>
 
           <!-- Fecha de inicio -->
-          <label class="mt-5 flex flex-col gap-1.5">
+          <div class="mt-5 flex flex-col gap-1.5">
             <span class="text-sm font-medium text-white">¿Cuándo arrancás?</span>
-            <input
-              v-model="startDate"
-              type="date"
-              class="h-11 w-full rounded-md border border-white/15 bg-white/[0.04] px-3 text-sm text-white [color-scheme:dark] focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-            />
-          </label>
+            <DateField v-model="startDate" variant="dark" placeholder="Elegir fecha" aria-label="Fecha de inicio del pronóstico" />
+          </div>
 
           <!-- Resultado -->
           <div class="mt-5 min-h-[7rem]">

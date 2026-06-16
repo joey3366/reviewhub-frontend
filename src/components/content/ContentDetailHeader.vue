@@ -41,9 +41,12 @@ const reviewCountLabel = computed(() => {
   return `${count} ${count === 1 ? 'puntuación' : 'puntuaciones'}`
 })
 
-const ratingForBadge = computed(() => {
-  if (props.content.avgRating === null) return null
-  return props.content.avgRating.toFixed(1)
+// Promedio interno de Kairos (NO IMDb). Mostramos "0.0" cuando aún no
+// hay reseñas para no esconder el bloque entero — el conteo al lado deja
+// claro que no hay puntuaciones todavía.
+const avgRatingLabel = computed(() => {
+  const v = props.content.avgRating
+  return v === null ? '0.0' : v.toFixed(1)
 })
 
 const hasWrittenReview = computed(() => {
@@ -135,13 +138,6 @@ function goBack() {
               <span class="text-white/30">·</span>
               <span>{{ runtimeLabel }}</span>
             </template>
-            <template v-if="ratingForBadge">
-              <span class="text-white/30">·</span>
-              <span class="inline-flex items-center gap-1.5 rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-black">
-                IMDb
-              </span>
-              <span class="font-medium text-white">{{ ratingForBadge }}/10</span>
-            </template>
           </div>
 
           <h1 class="text-5xl font-bold leading-[1.05] tracking-tight md:text-7xl fade-up" style="animation-delay: 120ms">
@@ -188,18 +184,16 @@ function goBack() {
             </template>
 
             <span class="inline-flex items-center gap-1.5 text-sm text-white/50">
-              <template v-if="ratingForBadge">
-                <svg
-                  class="avg-star h-4 w-4 flex-none text-amber-300"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <path d="M12 2.6l2.6 5.86 6.4.55-4.85 4.2 1.45 6.23L12 16.95 5.95 19.44 7.4 13.21 2.55 9.01l6.4-.55z" />
-                </svg>
-                <span>{{ ratingForBadge }} prom.</span>
-                <span class="text-white/30">·</span>
-              </template>
+              <svg
+                class="avg-star h-4 w-4 flex-none text-amber-300"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M12 2.6l2.6 5.86 6.4.55-4.85 4.2 1.45 6.23L12 16.95 5.95 19.44 7.4 13.21 2.55 9.01l6.4-.55z" />
+              </svg>
+              <span>{{ avgRatingLabel }} prom.</span>
+              <span class="text-white/30">·</span>
               <span>{{ reviewCountLabel }}</span>
             </span>
           </div>

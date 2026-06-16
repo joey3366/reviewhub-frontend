@@ -12,6 +12,12 @@ import {
   type UpdateSeriesInput,
 } from '@/api/admin'
 import ImageUploadInput from '@/components/ui/ImageUploadInput.vue'
+import DateField from '@/components/ui/DateField.vue'
+import GenreManagerModal from '@/components/admin/GenreManagerModal.vue'
+import FormBackdrop from '@/components/ui/FormBackdrop.vue'
+import { useToast } from '@/composables/useToast'
+
+const toast = useToast()
 
 const route = useRoute()
 const router = useRouter()
@@ -51,6 +57,26 @@ const saving = ref(false)
 const error = ref<string | null>(null)
 const fieldErrors = ref<Record<string, string>>({})
 
+// Estado del mini-form "Nuevo género". Cuando addingGenre = true, se muestra
+// el input inline en lugar del botón "+ Nuevo género".
+const addingGenre = ref(false)
+const newGenreName = ref('')
+const creatingGenre = ref(false)
+const newGenreError = ref<string | null>(null)
+
+// Modal "Gestionar géneros": rename + delete. Se sincroniza con allGenres y
+// limpia selectedGenreIds cuando se elimina uno que estaba marcado.
+const genreManagerOpen = ref(false)
+function onGenreUpdated(updated: Genre) {
+  allGenres.value = allGenres.value
+    .map((g) => (g.id === updated.id ? updated : g))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+function onGenreDeleted(id: string) {
+  allGenres.value = allGenres.value.filter((g) => g.id !== id)
+  selectedGenreIds.value = selectedGenreIds.value.filter((gid) => gid !== id)
+}
+
 function fieldValue(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null
 }
@@ -71,30 +97,37 @@ async function loadGenres() {
   }
 }
 
+// Carga el Content a TODOS los refs del form. Usada tanto al entrar a editar
+// (con el resultado de GET /contents/:slug) como al guardar (con el Content
+// que devuelve el PATCH, para mantener la vista en sync sin recargar).
+function applyContentToForm(c: Content) {
+  editingId.value = c.id
+  type.value = c.type
+  title.value = c.title
+  originalTitle.value = c.originalTitle ?? ''
+  synopsis.value = c.synopsis ?? ''
+  releaseYear.value = c.releaseYear
+  posterUrl.value = c.posterUrl ?? ''
+  backdropUrl.value = c.backdropUrl ?? ''
+  selectedGenreIds.value = c.genres.map((g) => g.id)
+  if (c.type === 'movie' && c.movie) {
+    runtimeMinutes.value = c.movie.runtimeMinutes
+    director.value = c.movie.director ?? ''
+    country.value = c.movie.country ?? ''
+  }
+  if (c.type === 'series' && c.series) {
+    seasonsCount.value = c.series.seasonsCount
+    episodesCount.value = c.series.episodesCount
+    broadcastStatus.value = (c.series.broadcastStatus as typeof broadcastStatus.value) ?? 'announced'
+    firstAired.value = c.series.firstAired ?? ''
+    lastAired.value = c.series.lastAired ?? ''
+  }
+}
+
 async function loadForEdit(slug: string) {
   try {
     const c = await contentApi.show(slug)
-    editingId.value = c.id
-    type.value = c.type
-    title.value = c.title
-    originalTitle.value = c.originalTitle ?? ''
-    synopsis.value = c.synopsis ?? ''
-    releaseYear.value = c.releaseYear
-    posterUrl.value = c.posterUrl ?? ''
-    backdropUrl.value = c.backdropUrl ?? ''
-    selectedGenreIds.value = c.genres.map((g) => g.id)
-    if (c.type === 'movie' && c.movie) {
-      runtimeMinutes.value = c.movie.runtimeMinutes
-      director.value = c.movie.director ?? ''
-      country.value = c.movie.country ?? ''
-    }
-    if (c.type === 'series' && c.series) {
-      seasonsCount.value = c.series.seasonsCount
-      episodesCount.value = c.series.episodesCount
-      broadcastStatus.value = (c.series.broadcastStatus as typeof broadcastStatus.value) ?? 'announced'
-      // firstAired/lastAired no vienen en el subset embebido — quedan vacíos a
-      // menos que el backend los exponga; si los mandás en blanco quedan igual.
-    }
+    applyContentToForm(c)
   } catch (e) {
     if (axios.isAxiosError(e) && e.response?.status === 404) {
       error.value = 'No encontramos ese contenido.'
@@ -115,6 +148,53 @@ function toggleGenre(id: string) {
   const i = selectedGenreIds.value.indexOf(id)
   if (i === -1) selectedGenreIds.value.push(id)
   else selectedGenreIds.value.splice(i, 1)
+}
+
+function startAddGenre() {
+  addingGenre.value = true
+  newGenreName.value = ''
+  newGenreError.value = null
+}
+
+function cancelAddGenre() {
+  addingGenre.value = false
+  newGenreName.value = ''
+  newGenreError.value = null
+}
+
+async function submitNewGenre() {
+  const name = newGenreName.value.trim()
+  if (name.length === 0) {
+    newGenreError.value = 'Escribí un nombre.'
+    return
+  }
+  // Si ya existe uno con el mismo nombre (insensible a caso), solo lo seleccionamos
+  // — evita crear duplicados a propósito desde el form.
+  const existing = allGenres.value.find((g) => g.name.toLowerCase() === name.toLowerCase())
+  if (existing) {
+    if (!selectedGenreIds.value.includes(existing.id)) selectedGenreIds.value.push(existing.id)
+    cancelAddGenre()
+    return
+  }
+  creatingGenre.value = true
+  newGenreError.value = null
+  try {
+    const created = await adminApi.createGenre({ name })
+    // Insertamos manteniendo el orden alfabético del listado original.
+    allGenres.value = [...allGenres.value, created].sort((a, b) => a.name.localeCompare(b.name))
+    selectedGenreIds.value.push(created.id)
+    cancelAddGenre()
+  } catch (e) {
+    if (axios.isAxiosError(e)) {
+      const body = e.response?.data as { message?: string } | undefined
+      newGenreError.value = body?.message ?? `Error HTTP ${e.response?.status ?? '—'}`
+    } else {
+      newGenreError.value = 'No se pudo crear el género.'
+    }
+    console.error(e)
+  } finally {
+    creatingGenre.value = false
+  }
 }
 
 async function submit() {
@@ -166,9 +246,18 @@ async function submit() {
         saved = await adminApi.createSeries(create)
       }
     }
-    // Redirigimos al listado para ver el cambio en contexto.
-    router.push({ name: 'admin-contents' })
-    void saved
+    if (isEdit.value) {
+      // En edit nos quedamos en la página: aplicamos lo que devolvió el
+      // backend al form (importa cuando el backend normaliza algo, ej. el
+      // country en mayúsculas) y avisamos con un toast.
+      applyContentToForm(saved)
+      toast.success('Cambios guardados')
+    } else {
+      // En create sí redirigimos al listado: ahí se ve el nuevo contenido en
+      // su contexto y la admin puede seguir agregando o editando otros.
+      toast.success('Contenido creado')
+      router.push({ name: 'admin-contents' })
+    }
   } catch (e) {
     if (axios.isAxiosError(e)) {
       const status = e.response?.status
@@ -248,6 +337,13 @@ function cancel() {
   router.push({ name: 'admin-contents' })
 }
 
+// Si la serie no está "finalizada", no tiene sentido tener fecha de último aire:
+// si la usuaria cambia el estado a 'announced'/'airing', limpiamos el campo para
+// que al guardar se mande null y el backend deje de exponerlo.
+watch(broadcastStatus, (next) => {
+  if (next !== 'ended') lastAired.value = ''
+})
+
 // Reseteamos campos type-específicos cuando cambia el tipo (solo en create).
 watch(type, (next, prev) => {
   if (isEdit.value || next === prev) return
@@ -266,241 +362,323 @@ watch(type, (next, prev) => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-3xl px-6 py-8">
-    <button
-      type="button"
-      class="mb-6 inline-flex items-center gap-2 text-sm font-medium text-ink-muted transition-colors hover:text-ink"
-      @click="cancel"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-        <path d="M19 12H5M12 19l-7-7 7-7" />
-      </svg>
-      Volver al catálogo
-    </button>
+  <FormBackdrop>
+    <div class="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-12">
+      <button
+        type="button"
+        class="mb-6 inline-flex items-center gap-2 text-sm font-medium text-white/70 transition-colors hover:text-white"
+        @click="cancel"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
+        Volver al catálogo
+      </button>
 
-    <header class="mb-6">
-      <p class="text-xs font-medium uppercase tracking-wide text-ink-subtle">Admin</p>
-      <h1 class="mt-0.5 text-2xl font-bold text-ink">
-        {{ isEdit ? 'Editar contenido' : 'Crear contenido' }}
-      </h1>
-    </header>
+      <div class="card-glow rounded-2xl border border-amber-400/30 bg-neutral-950/85 p-6 backdrop-blur-xl sm:p-8">
+        <header class="mb-6">
+          <p class="text-xs font-medium uppercase tracking-widest text-amber-300/70">Admin</p>
+          <h1 class="mt-0.5 text-2xl font-bold text-white">
+            {{ isEdit ? 'Editar contenido' : 'Crear contenido' }}
+          </h1>
+        </header>
 
-    <div v-if="loadingInitial" class="rounded-lg border border-outline bg-surface p-12 text-center">
-      <span class="inline-block h-6 w-6 animate-spin rounded-full border-2 border-ink-subtle border-t-transparent" />
+        <div v-if="loadingInitial" class="rounded-lg border border-white/10 bg-white/[0.04] p-12 text-center">
+          <span class="inline-block h-6 w-6 animate-spin rounded-full border-2 border-white/20 border-t-amber-400" />
+        </div>
+
+        <form v-else class="flex flex-col gap-5" @submit.prevent="submit">
+          <!-- Tipo (solo create) -->
+          <div v-if="!isEdit" class="rounded-lg border border-white/10 bg-white/[0.04] p-4">
+            <p class="mb-2 text-xs font-medium uppercase tracking-wide text-amber-300/70">Tipo</p>
+            <div class="flex gap-3">
+              <label class="flex items-center gap-2 text-sm text-white/80">
+                <input v-model="type" type="radio" value="movie" class="accent-amber-400" /> Película
+              </label>
+              <label class="flex items-center gap-2 text-sm text-white/80">
+                <input v-model="type" type="radio" value="series" class="accent-amber-400" /> Serie
+              </label>
+            </div>
+          </div>
+          <div v-else class="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-xs text-white/60">
+            Tipo: <span class="font-medium text-white">{{ type === 'movie' ? 'Película' : 'Serie' }}</span>
+            <span class="ml-2 text-white/40">(no se puede cambiar)</span>
+          </div>
+
+          <!-- Comunes -->
+          <div class="grid grid-cols-1 gap-4 rounded-lg border border-white/10 bg-white/[0.04] p-4 sm:grid-cols-2">
+            <label class="flex flex-col gap-1.5 sm:col-span-2">
+              <span class="text-sm font-medium text-white">Título <span class="text-red-400">*</span></span>
+              <input
+                v-model="title"
+                type="text"
+                required
+                class="h-10 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+              />
+              <span v-if="fieldErrors.title" class="text-xs text-red-300">{{ fieldErrors.title }}</span>
+            </label>
+            <label class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-white">Título original</span>
+              <input
+                v-model="originalTitle"
+                type="text"
+                class="h-10 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+              />
+            </label>
+            <label class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-white">Año</span>
+              <input
+                v-model.number="releaseYear"
+                type="number"
+                min="1888"
+                max="2099"
+                class="h-10 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 [color-scheme:dark]"
+              />
+            </label>
+            <label class="flex flex-col gap-1.5 sm:col-span-2">
+              <span class="text-sm font-medium text-white">Sinopsis</span>
+              <textarea
+                v-model="synopsis"
+                rows="4"
+                class="rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+              />
+            </label>
+          </div>
+
+          <!-- Carátulas: upload directo a Cloudinary o pegar URL externa -->
+          <div class="rounded-lg border border-white/10 bg-white/[0.04] p-4">
+            <p class="mb-3 text-xs font-medium uppercase tracking-wide text-amber-300/70">Carátulas</p>
+            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <ImageUploadInput
+                v-model="posterUrl"
+                label="Poster (vertical, 2:3)"
+                folder="reviewhub/covers/posters"
+                aspect-class="aspect-[2/3]"
+                variant="dark"
+              />
+              <ImageUploadInput
+                v-model="backdropUrl"
+                label="Backdrop (horizontal, 16:9)"
+                folder="reviewhub/covers/backdrops"
+                aspect-class="aspect-video"
+                variant="dark"
+              />
+            </div>
+          </div>
+
+          <!-- Solo película -->
+          <div v-if="type === 'movie'" class="grid grid-cols-1 gap-4 rounded-lg border border-white/10 bg-white/[0.04] p-4 sm:grid-cols-3">
+            <label class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-white">Duración (min)</span>
+              <input
+                v-model.number="runtimeMinutes"
+                type="number"
+                min="1"
+                class="h-10 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 [color-scheme:dark]"
+              />
+            </label>
+            <label class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-white">Director</span>
+              <input
+                v-model="director"
+                type="text"
+                class="h-10 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+              />
+            </label>
+            <label class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-white">País (ISO 2)</span>
+              <input
+                v-model="country"
+                type="text"
+                maxlength="2"
+                placeholder="AR"
+                class="h-10 rounded-md border border-white/15 bg-black/30 px-3 text-sm uppercase text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+              />
+            </label>
+          </div>
+
+          <!-- Solo serie -->
+          <div v-else class="grid grid-cols-1 gap-4 rounded-lg border border-white/10 bg-white/[0.04] p-4 sm:grid-cols-3">
+            <label class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-white">Temporadas</span>
+              <input
+                v-model.number="seasonsCount"
+                type="number"
+                min="1"
+                class="h-10 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 [color-scheme:dark]"
+              />
+            </label>
+            <label class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-white">Episodios (total)</span>
+              <input
+                v-model.number="episodesCount"
+                type="number"
+                min="1"
+                class="h-10 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 [color-scheme:dark]"
+              />
+            </label>
+            <label class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-white">Estado</span>
+              <select
+                v-model="broadcastStatus"
+                class="h-10 rounded-md border border-white/15 bg-black/30 px-2 text-sm text-white [color-scheme:dark] focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+              >
+                <option value="announced" class="bg-neutral-900">Anunciada</option>
+                <option value="airing" class="bg-neutral-900">En emisión</option>
+                <option value="ended" class="bg-neutral-900">Finalizada</option>
+              </select>
+            </label>
+            <div class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-white">Primer aire</span>
+              <DateField v-model="firstAired" variant="dark" placeholder="Elegir fecha" aria-label="Primer aire" />
+            </div>
+            <div v-if="broadcastStatus === 'ended'" class="flex flex-col gap-1.5">
+              <span class="text-sm font-medium text-white">Último aire</span>
+              <DateField v-model="lastAired" variant="dark" placeholder="Elegir fecha" aria-label="Último aire" />
+            </div>
+          </div>
+
+          <!-- Géneros (multi-select tipo pills) -->
+          <div class="rounded-lg border border-white/10 bg-white/[0.04] p-4">
+            <div class="mb-2 flex items-center justify-between">
+              <p class="text-xs font-medium uppercase tracking-wide text-amber-300/70">Géneros</p>
+              <button
+                v-if="allGenres.length > 0"
+                type="button"
+                class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-white/60 transition-colors hover:bg-white/5 hover:text-white"
+                @click="genreManagerOpen = true"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                  <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </svg>
+                Gestionar
+              </button>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="g in allGenres"
+                :key="g.id"
+                type="button"
+                class="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
+                :class="
+                  selectedGenreIds.includes(g.id)
+                    ? 'border-amber-400 bg-amber-400 text-black shadow-md shadow-amber-500/20'
+                    : 'border-white/15 bg-white/[0.04] text-white/70 hover:border-amber-400/60 hover:text-amber-300'
+                "
+                @click="toggleGenre(g.id)"
+              >
+                {{ g.name }}
+              </button>
+              <button
+                v-if="!addingGenre"
+                type="button"
+                class="rounded-full border border-dashed border-white/20 px-3 py-1 text-xs font-medium text-white/60 transition-colors hover:border-amber-400/60 hover:bg-amber-400/[0.06] hover:text-amber-300"
+                @click="startAddGenre"
+              >
+                + Nuevo género
+              </button>
+            </div>
+
+            <!-- Form inline de creación -->
+            <div
+              v-if="addingGenre"
+              class="mt-3 flex flex-col gap-2 rounded-md border border-amber-400/30 bg-amber-400/[0.06] p-3 sm:flex-row sm:items-center"
+            >
+              <input
+                v-model="newGenreName"
+                type="text"
+                placeholder="Ej. Documental"
+                maxlength="80"
+                class="h-9 flex-1 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                :disabled="creatingGenre"
+                @keydown.enter.prevent="submitNewGenre"
+                @keydown.esc.prevent="cancelAddGenre"
+              />
+              <div class="flex gap-2">
+                <button
+                  type="button"
+                  class="h-9 rounded-md border border-white/15 bg-white/[0.04] px-3 text-xs font-medium text-white/70 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="creatingGenre"
+                  @click="cancelAddGenre"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex h-9 items-center gap-2 rounded-md bg-amber-400 px-3 text-xs font-semibold text-black transition-colors hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="creatingGenre || newGenreName.trim().length === 0"
+                  @click="submitNewGenre"
+                >
+                  <span v-if="creatingGenre" class="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Crear
+                </button>
+              </div>
+            </div>
+            <p v-if="newGenreError" class="mt-2 text-xs text-red-300">{{ newGenreError }}</p>
+
+            <p v-if="selectedGenreIds.length > 10" class="mt-2 text-xs text-red-300">
+              Máximo 10 géneros.
+            </p>
+          </div>
+
+          <!-- Error general -->
+          <p v-if="error" class="rounded-md border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">
+            {{ error }}
+          </p>
+
+          <!-- Modal de gestión de géneros (rename + delete) -->
+          <GenreManagerModal
+            :open="genreManagerOpen"
+            :genres="allGenres"
+            @close="genreManagerOpen = false"
+            @updated="onGenreUpdated"
+            @deleted="onGenreDeleted"
+          />
+
+          <!-- Acciones -->
+          <div class="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              class="h-10 rounded-md border border-white/15 bg-white/[0.04] px-4 text-sm font-medium text-white/80 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="saving"
+              @click="cancel"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              class="inline-flex h-10 items-center gap-2 rounded-full bg-amber-400 px-6 text-sm font-semibold text-black shadow-lg shadow-amber-500/20 transition-colors hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="saving || selectedGenreIds.length > 10"
+            >
+              <span v-if="saving" class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              {{ isEdit ? 'Guardar cambios' : 'Crear' }}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
-
-    <form v-else class="flex flex-col gap-5" @submit.prevent="submit">
-      <!-- Tipo (solo create) -->
-      <div v-if="!isEdit" class="rounded-lg border border-outline bg-surface p-4">
-        <p class="mb-2 text-xs font-medium uppercase tracking-wide text-ink-muted">Tipo</p>
-        <div class="flex gap-3">
-          <label class="flex items-center gap-2 text-sm">
-            <input v-model="type" type="radio" value="movie" /> Película
-          </label>
-          <label class="flex items-center gap-2 text-sm">
-            <input v-model="type" type="radio" value="series" /> Serie
-          </label>
-        </div>
-      </div>
-      <div v-else class="rounded-lg border border-outline bg-surface-subtle p-3 text-xs text-ink-muted">
-        Tipo: <span class="font-medium text-ink">{{ type === 'movie' ? 'Película' : 'Serie' }}</span>
-        <span class="ml-2 text-ink-subtle">(no se puede cambiar)</span>
-      </div>
-
-      <!-- Comunes -->
-      <div class="grid grid-cols-1 gap-4 rounded-lg border border-outline bg-surface p-4 sm:grid-cols-2">
-        <label class="flex flex-col gap-1.5 sm:col-span-2">
-          <span class="text-sm font-medium text-ink">Título <span class="text-red-600">*</span></span>
-          <input
-            v-model="title"
-            type="text"
-            required
-            class="h-10 rounded-md border border-outline bg-white px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-          <span v-if="fieldErrors.title" class="text-xs text-red-600">{{ fieldErrors.title }}</span>
-        </label>
-        <label class="flex flex-col gap-1.5">
-          <span class="text-sm font-medium text-ink">Título original</span>
-          <input
-            v-model="originalTitle"
-            type="text"
-            class="h-10 rounded-md border border-outline bg-white px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-        </label>
-        <label class="flex flex-col gap-1.5">
-          <span class="text-sm font-medium text-ink">Año</span>
-          <input
-            v-model.number="releaseYear"
-            type="number"
-            min="1888"
-            max="2099"
-            class="h-10 rounded-md border border-outline bg-white px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-        </label>
-        <label class="flex flex-col gap-1.5 sm:col-span-2">
-          <span class="text-sm font-medium text-ink">Sinopsis</span>
-          <textarea
-            v-model="synopsis"
-            rows="4"
-            class="rounded-md border border-outline bg-white px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-        </label>
-      </div>
-
-      <!-- Carátulas: upload directo a Cloudinary o pegar URL externa -->
-      <div class="rounded-lg border border-outline bg-surface p-4">
-        <p class="mb-3 text-xs font-medium uppercase tracking-wide text-ink-muted">Carátulas</p>
-        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <ImageUploadInput
-            v-model="posterUrl"
-            label="Poster (vertical, 2:3)"
-            folder="reviewhub/covers/posters"
-            aspect-class="aspect-[2/3]"
-          />
-          <ImageUploadInput
-            v-model="backdropUrl"
-            label="Backdrop (horizontal, 16:9)"
-            folder="reviewhub/covers/backdrops"
-            aspect-class="aspect-video"
-          />
-        </div>
-        <p class="mt-3 text-xs text-ink-subtle">
-          Tip: si la URL externa no permite carga cross-origin podés envolverla con weserv:
-          <code class="rounded bg-surface-subtle px-1 text-ink">https://wsrv.nl/?url=…</code>
-        </p>
-      </div>
-
-      <!-- Solo película -->
-      <div v-if="type === 'movie'" class="grid grid-cols-1 gap-4 rounded-lg border border-outline bg-surface p-4 sm:grid-cols-3">
-        <label class="flex flex-col gap-1.5">
-          <span class="text-sm font-medium text-ink">Duración (min)</span>
-          <input
-            v-model.number="runtimeMinutes"
-            type="number"
-            min="1"
-            class="h-10 rounded-md border border-outline bg-white px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-        </label>
-        <label class="flex flex-col gap-1.5">
-          <span class="text-sm font-medium text-ink">Director</span>
-          <input
-            v-model="director"
-            type="text"
-            class="h-10 rounded-md border border-outline bg-white px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-        </label>
-        <label class="flex flex-col gap-1.5">
-          <span class="text-sm font-medium text-ink">País (ISO 2)</span>
-          <input
-            v-model="country"
-            type="text"
-            maxlength="2"
-            placeholder="AR"
-            class="h-10 rounded-md border border-outline bg-white px-3 text-sm uppercase text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-        </label>
-      </div>
-
-      <!-- Solo serie -->
-      <div v-else class="grid grid-cols-1 gap-4 rounded-lg border border-outline bg-surface p-4 sm:grid-cols-3">
-        <label class="flex flex-col gap-1.5">
-          <span class="text-sm font-medium text-ink">Temporadas</span>
-          <input
-            v-model.number="seasonsCount"
-            type="number"
-            min="1"
-            class="h-10 rounded-md border border-outline bg-white px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-        </label>
-        <label class="flex flex-col gap-1.5">
-          <span class="text-sm font-medium text-ink">Episodios (total)</span>
-          <input
-            v-model.number="episodesCount"
-            type="number"
-            min="1"
-            class="h-10 rounded-md border border-outline bg-white px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-        </label>
-        <label class="flex flex-col gap-1.5">
-          <span class="text-sm font-medium text-ink">Estado</span>
-          <select
-            v-model="broadcastStatus"
-            class="h-10 rounded-md border border-outline bg-white px-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-          >
-            <option value="announced">Anunciada</option>
-            <option value="airing">En emisión</option>
-            <option value="ended">Finalizada</option>
-          </select>
-        </label>
-        <label class="flex flex-col gap-1.5">
-          <span class="text-sm font-medium text-ink">Primer aire</span>
-          <input
-            v-model="firstAired"
-            type="date"
-            class="h-10 rounded-md border border-outline bg-white px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-        </label>
-        <label class="flex flex-col gap-1.5">
-          <span class="text-sm font-medium text-ink">Último aire</span>
-          <input
-            v-model="lastAired"
-            type="date"
-            class="h-10 rounded-md border border-outline bg-white px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-        </label>
-      </div>
-
-      <!-- Géneros (multi-select tipo pills) -->
-      <div class="rounded-lg border border-outline bg-surface p-4">
-        <p class="mb-2 text-xs font-medium uppercase tracking-wide text-ink-muted">Géneros</p>
-        <div v-if="allGenres.length === 0" class="text-xs text-ink-subtle">
-          No hay géneros configurados.
-        </div>
-        <div v-else class="flex flex-wrap gap-2">
-          <button
-            v-for="g in allGenres"
-            :key="g.id"
-            type="button"
-            class="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
-            :class="
-              selectedGenreIds.includes(g.id)
-                ? 'border-accent bg-accent text-white'
-                : 'border-outline bg-white text-ink-muted hover:border-accent hover:text-accent'
-            "
-            @click="toggleGenre(g.id)"
-          >
-            {{ g.name }}
-          </button>
-        </div>
-        <p v-if="selectedGenreIds.length > 10" class="mt-2 text-xs text-red-600">
-          Máximo 10 géneros.
-        </p>
-      </div>
-
-      <!-- Error general -->
-      <p v-if="error" class="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
-        {{ error }}
-      </p>
-
-      <!-- Acciones -->
-      <div class="flex items-center justify-end gap-2">
-        <button
-          type="button"
-          class="h-10 rounded-md border border-outline px-4 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-subtle"
-          :disabled="saving"
-          @click="cancel"
-        >
-          Cancelar
-        </button>
-        <button
-          type="submit"
-          class="inline-flex h-10 items-center gap-2 rounded-md bg-accent px-5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="saving || selectedGenreIds.length > 10"
-        >
-          <span v-if="saving" class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-          {{ isEdit ? 'Guardar cambios' : 'Crear' }}
-        </button>
-      </div>
-    </form>
-  </div>
+  </FormBackdrop>
 </template>
+
+<style scoped>
+@keyframes goldGlow {
+  0%, 100% {
+    box-shadow:
+      0 0 32px -8px rgba(251, 191, 36, 0.35),
+      inset 0 0 0 1px rgba(251, 191, 36, 0.06),
+      0 25px 50px -12px rgba(0, 0, 0, 0.8);
+  }
+  50% {
+    box-shadow:
+      0 0 56px -4px rgba(251, 191, 36, 0.55),
+      inset 0 0 0 1px rgba(251, 191, 36, 0.18),
+      0 25px 50px -12px rgba(0, 0, 0, 0.8);
+  }
+}
+.card-glow {
+  animation: goldGlow 5.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-glow { animation: none; }
+}
+</style>

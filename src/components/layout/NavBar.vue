@@ -29,12 +29,11 @@ async function handleLogout() {
         to="/"
         :class="
           isDark
-            ? 'flex items-center gap-2 text-base font-semibold tracking-tight text-white'
-            : 'flex items-center gap-2 text-base font-semibold tracking-tight text-ink'
+            ? 'text-xl font-semibold uppercase tracking-[0.25em] text-amber-300'
+            : 'text-xl font-semibold uppercase tracking-[0.25em] text-ink'
         "
       >
-        <span :class="isDark ? 'inline-block h-6 w-6 rounded bg-white' : 'inline-block h-6 w-6 rounded bg-ink'" />
-        ReviewHub
+        Kairos
       </RouterLink>
 
       <nav class="hidden items-center gap-1 md:flex">
@@ -101,7 +100,7 @@ async function handleLogout() {
           </RouterLink>
           <RouterLink
             to="/signup"
-            class="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+            class="rounded-md bg-amber-400 px-3 py-1.5 text-sm font-semibold text-black shadow-md shadow-amber-500/20 transition-colors hover:bg-amber-300"
           >
             Crear cuenta
           </RouterLink>

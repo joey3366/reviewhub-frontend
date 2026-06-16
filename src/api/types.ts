@@ -56,6 +56,8 @@ export interface Content {
     seasonsCount: number | null
     episodesCount: number | null
     broadcastStatus: string
+    firstAired: string | null
+    lastAired: string | null
   }
   createdAt: string
 }
@@ -262,6 +264,7 @@ export interface Retrospective {
   startedAt: string               // yyyy-MM-dd (del item)
   finishedAt: string              // yyyy-MM-dd (del item)
   expectedDays: number            // días válidos que "debería" haber tomado
+  expectedFinishDate: string      // yyyy-MM-dd — cuándo deberías haber terminado a tu ritmo
   actualValidDays: number         // días válidos reales en el rango
   actualSkippedDays: number       // días salteados reales en el rango
   actualCalendarDays: number      // días de calendario reales

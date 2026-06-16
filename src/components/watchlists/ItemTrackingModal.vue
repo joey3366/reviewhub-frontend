@@ -3,6 +3,7 @@ import axios from 'axios'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { WatchlistItem } from '@/api/types'
 import { watchlistsApi } from '@/api/watchlists'
+import DateField from '@/components/ui/DateField.vue'
 
 const props = defineProps<{
   open: boolean
@@ -433,22 +434,14 @@ onBeforeUnmount(() => {
 
             <!-- Fechas (solo series: una peli se ve de una) -->
             <div v-if="isSeries" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <label class="flex flex-col gap-1.5">
+              <div class="flex flex-col gap-1.5">
                 <span class="text-sm font-medium text-white">Empezaste</span>
-                <input
-                  v-model="startedAt"
-                  type="date"
-                  class="h-11 rounded-md border border-white/15 bg-white/[0.04] px-3 text-sm text-white [color-scheme:dark] focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                />
-              </label>
-              <label class="flex flex-col gap-1.5">
+                <DateField v-model="startedAt" variant="dark" placeholder="Elegir fecha" aria-label="Fecha de inicio" />
+              </div>
+              <div class="flex flex-col gap-1.5">
                 <span class="text-sm font-medium text-white">Terminaste</span>
-                <input
-                  v-model="finishedAt"
-                  type="date"
-                  class="h-11 rounded-md border border-white/15 bg-white/[0.04] px-3 text-sm text-white [color-scheme:dark] focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                />
-              </label>
+                <DateField v-model="finishedAt" variant="dark" placeholder="Elegir fecha" aria-label="Fecha de fin" />
+              </div>
             </div>
 
             <p v-if="error" class="rounded-md border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">

@@ -1,5 +1,5 @@
 import client from './client'
-import type { Content } from './types'
+import type { Content, Genre } from './types'
 
 /**
  * Endpoints admin-only para el catálogo (movies/series). El backend rechaza
@@ -94,5 +94,19 @@ export const adminApi = {
 
   deleteSeries: async (id: string) => {
     await client.delete(`/series/${id}`)
+  },
+
+  createGenre: async (input: { name: string }): Promise<Genre> => {
+    const { data } = await client.post<{ data: Genre }>('/genres', input)
+    return data.data
+  },
+
+  updateGenre: async (id: string, input: { name: string }): Promise<Genre> => {
+    const { data } = await client.patch<{ data: Genre }>(`/genres/${id}`, input)
+    return data.data
+  },
+
+  deleteGenre: async (id: string) => {
+    await client.delete(`/genres/${id}`)
   },
 }

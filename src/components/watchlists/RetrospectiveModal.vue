@@ -242,11 +242,19 @@ onBeforeUnmount(() => {
                 </div>
               </div>
 
-              <!-- Detalle -->
-              <p class="mt-4 text-sm text-white/70">
-                Lo viste del <span class="text-white">{{ formatMedium(retro.startedAt) }}</span>
-                al <span class="text-white">{{ formatMedium(retro.finishedAt) }}</span>.
-              </p>
+              <!-- Detalle: la meta vs lo real, según el ritmo -->
+              <div class="mt-4 flex flex-col gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-4 text-sm">
+                <p class="flex flex-wrap items-baseline gap-x-2 text-white/70">
+                  <span class="text-xs uppercase tracking-wide text-white/40">A tu ritmo</span>
+                  <span>deberías haber terminado el</span>
+                  <span class="font-semibold text-amber-300">{{ formatMedium(retro.expectedFinishDate) }}</span>
+                </p>
+                <p class="flex flex-wrap items-baseline gap-x-2 text-white/70">
+                  <span class="text-xs uppercase tracking-wide text-white/40">Terminaste el</span>
+                  <span class="font-semibold text-white">{{ formatMedium(retro.finishedAt) }}</span>
+                  <span class="text-xs text-white/40">(empezaste el {{ formatMedium(retro.startedAt) }})</span>
+                </p>
+              </div>
 
               <div class="mt-4 grid grid-cols-2 gap-3">
                 <div class="rounded-lg border border-white/10 bg-white/[0.03] p-3">

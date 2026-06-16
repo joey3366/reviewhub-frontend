@@ -4,6 +4,9 @@ import { useRouter } from 'vue-router'
 import type { Watchlist } from '@/api/types'
 import { watchlistsApi } from '@/api/watchlists'
 import ConfirmModal from '@/components/ui/ConfirmModal.vue'
+import { useToast } from '@/composables/useToast'
+
+const toast = useToast()
 
 const router = useRouter()
 
@@ -11,7 +14,6 @@ const lists = ref<Watchlist[]>([])
 const covers = ref<Record<string, string | null>>({})
 const loading = ref(true)
 const error = ref<string | null>(null)
-const actionError = ref<string | null>(null)
 
 // Tabs por tipo: 'all' | 'movies' | 'series'. Persistido entre sesiones.
 type ListsTab = 'all' | 'movies' | 'series'
@@ -74,7 +76,7 @@ async function persistOrder() {
     await watchlistsApi.reorder(lists.value.map((l) => l.id))
   } catch (e) {
     console.error(e)
-    actionError.value = 'No se pudo guardar el orden.'
+    toast.error('No se pudo guardar el orden.')
   }
 }
 
@@ -154,16 +156,14 @@ function itemsLabel(n: number | undefined) {
 function openCreate() {
   showCreate.value = true
   newName.value = ''
-  actionError.value = null
 }
 async function submitCreate() {
   const name = newName.value.trim()
   if (name.length < 3) {
-    actionError.value = 'El nombre necesita al menos 3 caracteres.'
+    toast.error('El nombre necesita al menos 3 caracteres.')
     return
   }
   creating.value = true
-  actionError.value = null
   try {
     const wl = await watchlistsApi.create({ name })
     lists.value.unshift(wl)
@@ -171,8 +171,9 @@ async function submitCreate() {
     persistOrder()
     showCreate.value = false
     newName.value = ''
+    toast.success(`Lista "${wl.name}" creada`)
   } catch (e) {
-    actionError.value = 'No se pudo crear la lista.'
+    toast.error('No se pudo crear la lista.')
     console.error(e)
   } finally {
     creating.value = false
@@ -184,7 +185,6 @@ function startRename(list: Watchlist) {
   menuOpenId.value = null
   editingId.value = list.id
   editName.value = list.name
-  actionError.value = null
 }
 function cancelRename() {
   editingId.value = null
@@ -193,7 +193,7 @@ function cancelRename() {
 async function submitRename(list: Watchlist) {
   const name = editName.value.trim()
   if (name.length < 3) {
-    actionError.value = 'El nombre necesita al menos 3 caracteres.'
+    toast.error('El nombre necesita al menos 3 caracteres.')
     return
   }
   if (name === list.name) {
@@ -205,8 +205,9 @@ async function submitRename(list: Watchlist) {
     const updated = await watchlistsApi.update(list.id, { name })
     list.name = updated.name
     cancelRename()
+    toast.success(`Lista renombrada a "${updated.name}"`)
   } catch (e) {
-    actionError.value = 'No se pudo renombrar la lista.'
+    toast.error('No se pudo renombrar la lista.')
     console.error(e)
   } finally {
     savingEdit.value = false
@@ -218,12 +219,12 @@ async function toggleVisibility(list: Watchlist) {
   menuOpenId.value = null
   if (busyId.value) return
   busyId.value = list.id
-  actionError.value = null
   try {
     const updated = await watchlistsApi.update(list.id, { isPublic: !list.isPublic })
     list.isPublic = updated.isPublic
+    toast.success(`Lista ahora ${updated.isPublic ? 'pública' : 'privada'}`)
   } catch (e) {
-    actionError.value = 'No se pudo cambiar la visibilidad.'
+    toast.error('No se pudo cambiar la visibilidad.')
     console.error(e)
   } finally {
     busyId.value = null
@@ -245,14 +246,14 @@ async function confirmRemoveList() {
   const list = listToDelete.value
   if (!list) return
   busyId.value = list.id
-  actionError.value = null
   try {
     await watchlistsApi.destroy(list.id)
     lists.value = lists.value.filter((l) => l.id !== list.id)
     listToDelete.value = null
     persistOrder()
+    toast.success(`Lista "${list.name}" borrada`)
   } catch (e) {
-    actionError.value = 'No se pudo borrar la lista.'
+    toast.error('No se pudo borrar la lista.')
     console.error(e)
     listToDelete.value = null
   } finally {
@@ -412,10 +413,6 @@ onMounted(loadLists)
           <span class="text-xs opacity-70">{{ counts.series }}</span>
         </button>
       </div>
-
-      <p v-if="actionError" class="mt-6 rounded-md border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">
-        {{ actionError }}
-      </p>
 
       <!-- Loading -->
       <div v-if="loading" class="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">

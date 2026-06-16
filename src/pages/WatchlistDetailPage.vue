@@ -10,6 +10,9 @@ import RetrospectiveModal from '@/components/watchlists/RetrospectiveModal.vue'
 import IncludesManagerModal from '@/components/watchlists/IncludesManagerModal.vue'
 import ListStatsModal from '@/components/watchlists/ListStatsModal.vue'
 import ConfirmModal from '@/components/ui/ConfirmModal.vue'
+import { useToast } from '@/composables/useToast'
+
+const toast = useToast()
 
 const route = useRoute()
 const router = useRouter()
@@ -19,7 +22,6 @@ const id = computed(() => route.params.id as string)
 const watchlist = ref<Watchlist | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
-const actionError = ref<string | null>(null)
 const removingId = ref<string | null>(null)
 
 // Modal de seguimiento (duración/episodios/fechas). null = cerrado.
@@ -122,7 +124,7 @@ async function onItemDragEnd() {
     const ownIds = orderedItems.value.filter((it) => !isInherited(it)).map((it) => it.id)
     await watchlistsApi.reorderItems(watchlist.value.id, ownIds)
   } catch (e) {
-    actionError.value = 'No se pudo guardar el orden.'
+    toast.error('No se pudo guardar el orden.')
     console.error(e)
   }
 }
@@ -170,14 +172,15 @@ async function confirmRemoveItem() {
   const item = itemToRemove.value
   if (!item) return
   removingId.value = item.id
-  actionError.value = null
+  const title = item.content?.title ?? 'el título'
   try {
     await watchlistsApi.removeItem(watchlist.value.id, item.id)
     itemToRemove.value = null
     // Refrescamos para recalcular conteo y duración total del backend.
     watchlist.value = await watchlistsApi.show(watchlist.value.id)
+    toast.success(`"${title}" quitado de la lista`)
   } catch (e) {
-    actionError.value = 'No se pudo quitar el título.'
+    toast.error('No se pudo quitar el título.')
     console.error(e)
     itemToRemove.value = null
   } finally {
@@ -191,12 +194,13 @@ function openTracking(item: WatchlistItem) {
 }
 async function onTrackingSaved() {
   trackingItem.value = null
+  toast.success('Seguimiento guardado')
   if (!watchlist.value) return
   try {
     // Refrescamos para recalcular duración total y campos derivados (daysElapsed).
     watchlist.value = await watchlistsApi.show(watchlist.value.id)
   } catch (e) {
-    actionError.value = 'Se guardó, pero no pudimos refrescar la lista.'
+    toast.error('Se guardó, pero no pudimos refrescar la lista.')
     console.error(e)
   }
 }
@@ -227,9 +231,12 @@ function hasTracking(item: WatchlistItem) {
 // Pronóstico/retrospectiva/progreso: solo en items PROPIOS — los heredados se
 // gestionan desde su lista original (donde sí pertenece el itemId al watchlist).
 function canForecast(item: WatchlistItem) {
+  // Si ya terminaste, el pronóstico pierde sentido — la retrospectiva ahora
+  // contesta "deberías haber terminado el X" con la misma info que el forecast.
   return (
     !isInherited(item) &&
     item.content?.type === 'series' &&
+    !item.finishedAt &&
     (item.durationSeconds > 0 || (item.episodesWatched ?? 0) > 0)
   )
 }
@@ -373,10 +380,6 @@ watch(id, loadWatchlist, { immediate: true })
             </button>
           </div>
         </header>
-
-        <p v-if="actionError" class="mt-6 rounded-md border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">
-          {{ actionError }}
-        </p>
 
         <!-- Vacía -->
         <div

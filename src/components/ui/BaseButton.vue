@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-type Variant = 'primary' | 'secondary' | 'ghost'
+type Variant = 'primary' | 'secondary' | 'ghost' | 'gold'
 type Size = 'sm' | 'md'
 
 const props = withDefaults(
@@ -24,6 +24,8 @@ const classes = computed(() => {
     secondary:
       'border border-outline bg-surface text-ink hover:bg-surface-subtle hover:border-outline-strong',
     ghost: 'text-ink hover:bg-surface-subtle',
+    // CTA dorado para forms cinemáticos sobre fondo oscuro.
+    gold: 'bg-amber-400 text-black shadow-lg shadow-amber-500/20 hover:bg-amber-300',
   }
 
   const sizes: Record<Size, string> = {

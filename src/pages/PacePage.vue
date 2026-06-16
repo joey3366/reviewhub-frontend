@@ -3,6 +3,9 @@ import axios from 'axios'
 import { computed, onMounted, ref } from 'vue'
 import type { Holiday, Weekday } from '@/api/types'
 import { playbackApi } from '@/api/playback'
+import { useToast } from '@/composables/useToast'
+
+const toast = useToast()
 
 // --- Días de la semana (orden lunes→domingo, como se lee acá) ---
 const WEEKDAYS: { key: Weekday; label: string }[] = [
@@ -37,15 +40,12 @@ const minutes = ref<number | null>(null)
 const episodes = ref<number | null>(null)
 const skipWeekdays = ref<Weekday[]>([])
 const savingPace = ref(false)
-const paceError = ref<string | null>(null)
-const paceSaved = ref(false)
 
 // --- Días libres ---
 const holidays = ref<Holiday[]>([])
 const newDate = ref('')
 const newHolidayName = ref('')
 const addingHoliday = ref(false)
-const holidayError = ref<string | null>(null)
 const removingDate = ref<string | null>(null)
 
 // Normaliza el valor de un input numérico: '' / null / NaN → null; número → número.
@@ -78,7 +78,7 @@ function toggleWeekday(key: Weekday) {
     return
   }
   if (skipWeekdays.value.length >= 6) {
-    paceError.value = 'No podés saltear los 7 días: necesitás al menos uno para ver.'
+    toast.error('No podés saltear los 7 días: necesitás al menos uno para ver.')
     return
   }
   skipWeekdays.value = [...skipWeekdays.value, key]
@@ -113,25 +113,24 @@ async function loadAll() {
 }
 
 async function savePace() {
-  paceError.value = null
   const mRaw = fieldValue(minutes.value)
   const eRaw = fieldValue(episodes.value)
   const m = mRaw === null ? null : Math.trunc(mRaw)
   const e = eRaw === null ? null : Math.trunc(eRaw)
   if (m === null && e === null) {
-    paceError.value = 'Configurá al menos minutos o episodios por día.'
+    toast.error('Configurá al menos minutos o episodios por día.')
     return
   }
   if (m !== null && (m < 1 || m > 1440)) {
-    paceError.value = 'Los minutos por día van de 1 a 1440.'
+    toast.error('Los minutos por día van de 1 a 1440.')
     return
   }
   if (e !== null && (e < 1 || e > 100)) {
-    paceError.value = 'Los episodios por día van de 1 a 100.'
+    toast.error('Los episodios por día van de 1 a 100.')
     return
   }
   if (skipWeekdays.value.length >= 7) {
-    paceError.value = 'No podés saltear los 7 días.'
+    toast.error('No podés saltear los 7 días.')
     return
   }
   savingPace.value = true
@@ -144,17 +143,18 @@ async function savePace() {
     minutes.value = updated.dailyMinutes
     episodes.value = updated.dailyEpisodes
     skipWeekdays.value = [...updated.skipWeekdays]
-    paceSaved.value = true
-    setTimeout(() => (paceSaved.value = false), 4000)
+    toast.success('Ritmo guardado')
   } catch (err) {
     if (axios.isAxiosError(err)) {
       const status = err.response?.status
       const msg = (err.response?.data as { message?: string } | undefined)?.message
-      paceError.value = status
-        ? `No se pudo guardar el ritmo (HTTP ${status}${msg ? `: ${msg}` : ''}).`
-        : 'No se pudo guardar el ritmo: el servidor no respondió. ¿Está corriendo el backend?'
+      toast.error(
+        status
+          ? `No se pudo guardar el ritmo (HTTP ${status}${msg ? `: ${msg}` : ''}).`
+          : 'No se pudo guardar el ritmo: el servidor no respondió. ¿Está corriendo el backend?'
+      )
     } else {
-      paceError.value = 'No se pudo guardar el ritmo.'
+      toast.error('No se pudo guardar el ritmo.')
     }
   } finally {
     savingPace.value = false
@@ -162,9 +162,8 @@ async function savePace() {
 }
 
 async function addHoliday() {
-  holidayError.value = null
   if (!newDate.value) {
-    holidayError.value = 'Elegí una fecha.'
+    toast.error('Elegí una fecha.')
     return
   }
   addingHoliday.value = true
@@ -176,11 +175,12 @@ async function addHoliday() {
     holidays.value = [...holidays.value, h].sort((a, b) => a.date.localeCompare(b.date))
     newDate.value = ''
     newHolidayName.value = ''
+    toast.success(h.name ? `Día libre agregado: ${h.name}` : 'Día libre agregado')
   } catch (err) {
     if (axios.isAxiosError(err) && err.response?.status === 409) {
-      holidayError.value = 'Ya tenés un día libre en esa fecha.'
+      toast.error('Ya tenés un día libre en esa fecha.')
     } else {
-      holidayError.value = 'No se pudo agregar el día libre.'
+      toast.error('No se pudo agregar el día libre.')
     }
     console.error(err)
   } finally {
@@ -190,12 +190,12 @@ async function addHoliday() {
 
 async function removeHoliday(date: string) {
   removingDate.value = date
-  holidayError.value = null
   try {
     await playbackApi.removeHoliday(date)
     holidays.value = holidays.value.filter((h) => h.date !== date)
+    toast.success('Día libre quitado')
   } catch (err) {
-    holidayError.value = 'No se pudo borrar el día libre.'
+    toast.error('No se pudo borrar el día libre.')
     console.error(err)
   } finally {
     removingDate.value = null
@@ -231,7 +231,7 @@ onMounted(loadAll)
       <header class="flex flex-col gap-2">
         <h1 class="text-4xl font-bold tracking-tight">Mi ritmo</h1>
         <p class="text-sm text-white/60">
-          Decile a ReviewHub cuánto ves por día y qué días descansás. Con eso
+          Decile a Kairos cuánto ves por día y qué días descansás. Con eso
           calcula cuándo vas a terminar cada peli o serie de tus listas.
         </p>
       </header>
@@ -309,10 +309,6 @@ onMounted(loadAll)
             {{ paceSummary }}
           </p>
 
-          <p v-if="paceError" class="mt-4 rounded-md border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">
-            {{ paceError }}
-          </p>
-
           <div class="mt-5">
             <button
               type="button"
@@ -323,17 +319,6 @@ onMounted(loadAll)
               <span v-if="savingPace" class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
               Guardar ritmo
             </button>
-            <transition name="fade">
-              <p
-                v-if="paceSaved"
-                class="mt-4 flex items-center gap-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-200"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 shrink-0">
-                  <path d="M20 6 9 17l-5-5" />
-                </svg>
-                ¡Ritmo guardado! Ya podemos calcular cuándo terminás cada título.
-              </p>
-            </transition>
           </div>
         </section>
 
@@ -372,10 +357,6 @@ onMounted(loadAll)
               Agregar
             </button>
           </form>
-
-          <p v-if="holidayError" class="mt-4 rounded-md border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">
-            {{ holidayError }}
-          </p>
 
           <!-- Lista de días libres -->
           <ul v-if="holidays.length > 0" class="mt-5 divide-y divide-white/5 overflow-hidden rounded-xl border border-white/10">

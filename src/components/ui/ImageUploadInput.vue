@@ -21,6 +21,7 @@ import {
  *  - folder: sub-carpeta dentro del preset, ej. "posters"
  *  - aspectClass: clase Tailwind para el aspect-ratio del preview
  *  - accept: filtro de file picker (default "image/*")
+ *  - variant: light para páginas claras, dark para forms sobre fondo oscuro
  */
 
 const props = withDefaults(
@@ -30,11 +31,13 @@ const props = withDefaults(
     folder?: string
     aspectClass?: string
     accept?: string
+    variant?: 'light' | 'dark'
   }>(),
   {
     folder: undefined,
     aspectClass: 'aspect-video',
     accept: 'image/png, image/jpeg, image/webp',
+    variant: 'light',
   }
 )
 
@@ -53,6 +56,57 @@ const urlMode = ref(false)
 const urlDraft = ref('')
 
 const hasValue = computed(() => props.modelValue.trim().length > 0)
+
+const styles = computed(() => {
+  if (props.variant === 'dark') {
+    return {
+      label: 'text-white',
+      preview: 'border-amber-400/20 bg-black/30',
+      btnChange: 'border-white/15 bg-white/[0.04] text-white/80 hover:bg-white/10',
+      btnRemove: 'text-red-300 hover:bg-red-500/10',
+      dropZoneIdle: 'border-white/15 bg-white/[0.03] hover:border-amber-400/60',
+      dropZoneDragOver: 'border-amber-400 bg-amber-400/[0.08]',
+      iconUpload: 'text-white/50',
+      dropMainText: 'text-white',
+      dropSubText: 'text-white/50',
+      progressTrack: 'bg-white/10',
+      progressBar: 'bg-amber-400',
+      progressText: 'text-white/70',
+      spinner: 'border-amber-400',
+      urlPanel: 'border-white/15 bg-black/30',
+      urlInput:
+        'border-white/15 bg-black/40 text-white placeholder:text-white/30 focus:border-amber-400 focus:ring-amber-400',
+      urlCancel: 'text-white/60 hover:text-white',
+      urlApply: 'bg-amber-400 text-black hover:bg-amber-300',
+      errorText: 'text-red-300',
+      warnText: 'text-amber-300',
+      urlToggle: 'text-amber-300/80 hover:text-amber-200 hover:underline',
+    }
+  }
+  return {
+    label: 'text-ink',
+    preview: 'border-outline bg-surface-subtle',
+    btnChange: 'border-outline text-ink-muted hover:bg-surface-subtle',
+    btnRemove: 'text-red-600 hover:bg-red-50',
+    dropZoneIdle: 'border-outline bg-surface hover:border-ink-subtle',
+    dropZoneDragOver: 'border-accent bg-accent/5',
+    iconUpload: 'text-ink-subtle',
+    dropMainText: 'text-ink',
+    dropSubText: 'text-ink-subtle',
+    progressTrack: 'bg-surface-subtle',
+    progressBar: 'bg-accent',
+    progressText: 'text-ink-muted',
+    spinner: 'border-accent',
+    urlPanel: 'border-outline bg-surface',
+    urlInput:
+      'border-outline bg-white text-ink focus:border-accent focus:ring-accent',
+    urlCancel: 'text-ink-muted hover:text-ink',
+    urlApply: 'bg-accent text-white hover:bg-accent-hover',
+    errorText: 'text-red-600',
+    warnText: 'text-amber-700',
+    urlToggle: 'text-ink-muted hover:underline',
+  }
+})
 
 function pick() {
   fileInputRef.value?.click()
@@ -123,26 +177,27 @@ function applyUrl() {
 
 <template>
   <div class="flex flex-col gap-2">
-    <span class="text-sm font-medium text-ink">{{ label }}</span>
+    <span class="text-sm font-medium" :class="styles.label">{{ label }}</span>
 
     <!-- Preview cuando ya hay URL -->
     <div v-if="hasValue && !uploading" class="flex items-start gap-3">
-      <div :class="['shrink-0 overflow-hidden rounded border border-outline bg-surface-subtle', aspectClass === 'aspect-[2/3]' ? 'h-40 w-28' : 'h-24 w-40']">
+      <div :class="['shrink-0 overflow-hidden rounded border', styles.preview, aspectClass === 'aspect-[2/3]' ? 'h-40 w-28' : 'h-24 w-40']">
         <img :src="modelValue" :alt="label" class="h-full w-full object-cover" @error="error = 'No se pudo cargar la imagen desde esa URL.'" />
       </div>
       <div class="flex min-w-0 flex-1 flex-col gap-1.5">
-        <p class="break-all text-xs text-ink-muted">{{ modelValue }}</p>
         <div class="flex gap-2">
           <button
             type="button"
-            class="rounded-md border border-outline px-2.5 py-1 text-xs font-medium text-ink-muted hover:bg-surface-subtle"
+            class="rounded-md border px-2.5 py-1 text-xs font-medium"
+            :class="styles.btnChange"
             @click="pick"
           >
             Cambiar
           </button>
           <button
             type="button"
-            class="rounded-md px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+            class="rounded-md px-2.5 py-1 text-xs font-medium"
+            :class="styles.btnRemove"
             @click="clear"
           >
             Quitar
@@ -158,9 +213,7 @@ function applyUrl() {
         :class="[
           'flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 text-center transition-colors',
           aspectClass,
-          dragOver
-            ? 'border-accent bg-accent/5'
-            : 'border-outline bg-surface hover:border-ink-subtle',
+          dragOver ? styles.dropZoneDragOver : styles.dropZoneIdle,
           uploading ? 'pointer-events-none opacity-70' : 'cursor-pointer',
         ]"
         role="button"
@@ -175,35 +228,36 @@ function applyUrl() {
         @drop.prevent="onDrop"
       >
         <template v-if="uploading">
-          <span class="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-          <p class="text-xs text-ink-muted">Subiendo… {{ progress }}%</p>
-          <div class="h-1 w-full max-w-[12rem] overflow-hidden rounded-full bg-surface-subtle">
-            <div class="h-full bg-accent transition-all" :style="{ width: progress + '%' }" />
+          <span class="h-6 w-6 animate-spin rounded-full border-2 border-t-transparent" :class="styles.spinner" />
+          <p class="text-xs" :class="styles.progressText">Subiendo… {{ progress }}%</p>
+          <div class="h-1 w-full max-w-[12rem] overflow-hidden rounded-full" :class="styles.progressTrack">
+            <div class="h-full transition-all" :class="styles.progressBar" :style="{ width: progress + '%' }" />
           </div>
         </template>
         <template v-else>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="h-8 w-8 text-ink-subtle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="h-8 w-8" :class="styles.iconUpload">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
           </svg>
-          <p class="text-sm text-ink">Arrastrá una imagen o tocá</p>
-          <p class="text-xs text-ink-subtle">PNG, JPG o WebP · máx 5MB</p>
+          <p class="text-sm" :class="styles.dropMainText">Arrastrá una imagen o tocá</p>
+          <p class="text-xs" :class="styles.dropSubText">PNG, JPG o WebP · máx 5MB</p>
         </template>
       </div>
 
       <!-- Modo URL: input + apply -->
-      <div v-else class="flex flex-col gap-2 rounded-lg border border-outline bg-surface p-3">
+      <div v-else class="flex flex-col gap-2 rounded-lg border p-3" :class="styles.urlPanel">
         <input
           v-model="urlDraft"
           type="url"
           placeholder="https://…"
-          class="h-10 rounded-md border border-outline bg-white px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+          class="h-10 rounded-md border px-3 text-sm focus:outline-none focus:ring-1"
+          :class="styles.urlInput"
           @keydown.enter.prevent="applyUrl"
         />
         <div class="flex justify-end gap-2">
-          <button type="button" class="text-xs text-ink-muted hover:text-ink" @click="urlMode = false">
+          <button type="button" class="text-xs" :class="styles.urlCancel" @click="urlMode = false">
             Cancelar
           </button>
-          <button type="button" class="rounded-md bg-accent px-3 py-1 text-xs font-semibold text-white hover:bg-accent-hover" @click="applyUrl">
+          <button type="button" class="rounded-md px-3 py-1 text-xs font-semibold" :class="styles.urlApply" @click="applyUrl">
             Usar esta URL
           </button>
         </div>
@@ -213,15 +267,16 @@ function applyUrl() {
       <button
         v-if="!urlMode && !uploading"
         type="button"
-        class="self-start text-xs text-ink-muted underline-offset-2 hover:underline"
+        class="self-start text-xs underline-offset-2"
+        :class="styles.urlToggle"
         @click="urlMode = true; urlDraft = ''"
       >
         o pegá una URL externa
       </button>
     </template>
 
-    <p v-if="error" class="text-xs text-red-600">{{ error }}</p>
-    <p v-if="!cloudinaryReady" class="text-xs text-amber-700">
+    <p v-if="error" class="text-xs" :class="styles.errorText">{{ error }}</p>
+    <p v-if="!cloudinaryReady" class="text-xs" :class="styles.warnText">
       Cloudinary no está configurado: solo podés pegar URLs.
     </p>
 

@@ -11,6 +11,9 @@ import ReviewModal from '@/components/content/ReviewModal.vue'
 import PaginationControls from '@/components/PaginationControls.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import ConfirmModal from '@/components/ui/ConfirmModal.vue'
+import { useToast } from '@/composables/useToast'
+
+const toast = useToast()
 
 const route = useRoute()
 const router = useRouter()
@@ -38,7 +41,6 @@ const modalOpen = ref(false)
 const editingReview = ref<Review | null>(null)
 const presetRating = ref<number | undefined>(undefined)
 const deletingId = ref<string | null>(null)
-const actionError = ref<string | null>(null)
 const reviewToDelete = ref<Review | null>(null)
 
 const myReview = computed(() => {
@@ -105,14 +107,12 @@ function openCreate() {
     editingReview.value = null
   }
   presetRating.value = undefined
-  actionError.value = null
   modalOpen.value = true
 }
 
 function openEdit(review: Review) {
   editingReview.value = review
   presetRating.value = undefined
-  actionError.value = null
   modalOpen.value = true
 }
 
@@ -121,7 +121,6 @@ async function openQuickRate(rating: number) {
     router.push({ path: '/login', query: { redirect: route.fullPath } })
     return
   }
-  actionError.value = null
   try {
     if (myReview.value) {
       await reviewsApi.update(myReview.value.id, { rating })
@@ -129,9 +128,10 @@ async function openQuickRate(rating: number) {
       await reviewsApi.create(slug.value, { rating })
     }
     await Promise.all([loadReviews(), loadContent()])
+    toast.success(`Tu puntuación: ${rating}/10`)
   } catch (e) {
     console.error(e)
-    actionError.value = 'No pudimos guardar tu puntuación. Intentá de nuevo.'
+    toast.error('No pudimos guardar tu puntuación. Intentá de nuevo.')
   }
 }
 
@@ -144,6 +144,7 @@ function closeModal() {
 async function handleSuccess() {
   closeModal()
   await Promise.all([loadReviews(), loadContent()])
+  toast.success('Reseña guardada')
 }
 
 function handleDelete(review: Review) {
@@ -154,14 +155,14 @@ async function confirmDeleteReview() {
   const review = reviewToDelete.value
   if (!review) return
   deletingId.value = review.id
-  actionError.value = null
   try {
     await reviewsApi.destroy(review.id)
     reviewToDelete.value = null
     await Promise.all([loadReviews(), loadContent()])
+    toast.success('Reseña borrada')
   } catch (e) {
     console.error(e)
-    actionError.value = 'No pudimos borrar la reseña. Intentá de nuevo.'
+    toast.error('No pudimos borrar la reseña. Intentá de nuevo.')
     reviewToDelete.value = null
   } finally {
     deletingId.value = null
@@ -285,14 +286,6 @@ function goHome() {
               Iniciá sesión para reseñar
             </router-link>
           </div>
-        </div>
-
-        <div
-          v-if="actionError"
-          class="rounded-md border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
-          role="alert"
-        >
-          {{ actionError }}
         </div>
 
         <div v-if="reviewsLoading" class="flex flex-col gap-4">

@@ -36,22 +36,22 @@ const canNext = computed(() => props.meta.currentPage < props.meta.lastPage)
     <button
       type="button"
       :disabled="!canPrev"
-      class="h-9 rounded-md border border-outline px-3 text-sm font-medium text-ink transition-colors hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-40"
+      class="h-9 rounded-md border border-white/15 bg-white/[0.04] px-3 text-sm font-medium text-white/80 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
       @click="$emit('update:page', meta.currentPage - 1)"
     >
       Anterior
     </button>
 
     <template v-for="(p, i) in pages" :key="i">
-      <span v-if="p === '…'" class="px-2 text-sm text-ink-subtle">…</span>
+      <span v-if="p === '…'" class="px-2 text-sm text-white/40">…</span>
       <button
         v-else
         type="button"
         :class="[
           'h-9 min-w-9 rounded-md px-3 text-sm font-medium transition-colors',
           p === meta.currentPage
-            ? 'bg-ink text-white'
-            : 'border border-outline text-ink hover:bg-surface-subtle',
+            ? 'bg-amber-400 text-black shadow-md shadow-amber-500/20'
+            : 'border border-white/15 bg-white/[0.04] text-white/80 hover:bg-white/10',
         ]"
         @click="$emit('update:page', p as number)"
       >
@@ -62,7 +62,7 @@ const canNext = computed(() => props.meta.currentPage < props.meta.lastPage)
     <button
       type="button"
       :disabled="!canNext"
-      class="h-9 rounded-md border border-outline px-3 text-sm font-medium text-ink transition-colors hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-40"
+      class="h-9 rounded-md border border-white/15 bg-white/[0.04] px-3 text-sm font-medium text-white/80 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
       @click="$emit('update:page', meta.currentPage + 1)"
     >
       Siguiente
