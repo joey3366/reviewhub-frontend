@@ -21,8 +21,8 @@ async function handleLogout() {
   <header
     :class="
       isDark
-        ? 'sticky top-3 z-40 mt-3 bg-black/40 backdrop-blur-md'
-        : 'sticky top-3 z-40 mt-3 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80'
+        ? 'relative z-40 mt-3 bg-neutral-950/85 backdrop-blur-xl supports-[backdrop-filter]:bg-neutral-950/75'
+        : 'relative z-40 mt-3 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80'
     "
   >
     <div class="mx-auto flex h-14 max-w-7xl items-center gap-4 px-6">
