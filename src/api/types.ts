@@ -26,15 +26,22 @@ export interface Paginated<T> {
   metadata: PaginationMeta
 }
 
+export type ContentType = 'movie' | 'series' | 'game'
+
+export type GenreAppliesTo = 'movie' | 'series' | 'game' | 'all'
+
 export interface Genre {
   id: string
   slug: string
   name: string
+  appliesTo: GenreAppliesTo
 }
+
+export type GamePlatform = 'pc' | 'ps5' | 'ps4' | 'xbox' | 'switch' | 'mobile'
 
 export interface Content {
   id: string
-  type: 'movie' | 'series'
+  type: ContentType
   slug: string
   title: string
   originalTitle: string | null
@@ -58,6 +65,12 @@ export interface Content {
     broadcastStatus: string
     firstAired: string | null
     lastAired: string | null
+  }
+  game?: {
+    hltbHours: number | null
+    developer: string | null
+    publisher: string | null
+    platforms: GamePlatform[]
   }
   createdAt: string
 }
@@ -84,7 +97,7 @@ export interface WatchlistItemContent {
   id: string
   slug: string
   title: string
-  type: 'movie' | 'series'
+  type: ContentType
   posterUrl: string | null
   backdropUrl: string | null
   avgRating: number | null
@@ -132,6 +145,7 @@ export interface Watchlist {
   itemsCount?: number             // en list (withCount) y en show
   moviesCount?: number            // solo en listMine (subquery por tipo)
   seriesCount?: number            // solo en listMine (subquery por tipo)
+  gamesCount?: number             // solo en listMine (subquery por tipo)
   // Los siguientes solo vienen en el detalle (show), donde se precargan los items:
   items?: WatchlistItem[]
   totalDurationSeconds?: number
@@ -251,7 +265,7 @@ export interface ListStats {
     id: string
     contentId: string
     title: string
-    type: 'movie' | 'series'
+    type: ContentType
     startedAt: string          // yyyy-MM-dd
     finishedAt: string | null  // null = in-flight
     viaWatchlistName: string | null  // null si es propio del watchlist

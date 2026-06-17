@@ -67,6 +67,48 @@ export type UpdateSeriesInput = {
   genres?: string[]
 }
 
+export const GAME_PLATFORMS = ['pc', 'ps5', 'ps4', 'xbox', 'switch', 'mobile'] as const
+export type GamePlatform = (typeof GAME_PLATFORMS)[number]
+
+export const GAME_PLATFORM_LABELS: Record<GamePlatform, string> = {
+  pc: 'PC',
+  ps5: 'PS5',
+  ps4: 'PS4',
+  xbox: 'Xbox',
+  switch: 'Switch',
+  mobile: 'Mobile',
+}
+
+export interface CreateGameInput {
+  title: string
+  originalTitle?: string
+  synopsis?: string
+  releaseYear?: number
+  posterUrl?: string
+  backdropUrl?: string
+  hltbHours?: number
+  developer?: string
+  publisher?: string
+  platforms?: GamePlatform[]
+  genres?: string[]
+}
+
+export type UpdateGameInput = {
+  title?: string
+  originalTitle?: string | null
+  synopsis?: string | null
+  releaseYear?: number | null
+  posterUrl?: string | null
+  backdropUrl?: string | null
+  hltbHours?: number | null
+  developer?: string | null
+  publisher?: string | null
+  platforms?: GamePlatform[] | null
+  genres?: string[]
+}
+
+export type GenreAppliesTo = 'movie' | 'series' | 'game' | 'all'
+
 export const adminApi = {
   createMovie: async (input: CreateMovieInput) => {
     const { data } = await client.post<{ data: Content }>('/movies', input)
@@ -96,12 +138,29 @@ export const adminApi = {
     await client.delete(`/series/${id}`)
   },
 
-  createGenre: async (input: { name: string }): Promise<Genre> => {
+  createGame: async (input: CreateGameInput) => {
+    const { data } = await client.post<{ data: Content }>('/games', input)
+    return data.data
+  },
+
+  updateGame: async (id: string, input: UpdateGameInput) => {
+    const { data } = await client.patch<{ data: Content }>(`/games/${id}`, input)
+    return data.data
+  },
+
+  deleteGame: async (id: string) => {
+    await client.delete(`/games/${id}`)
+  },
+
+  createGenre: async (input: { name: string; appliesTo?: GenreAppliesTo }): Promise<Genre> => {
     const { data } = await client.post<{ data: Genre }>('/genres', input)
     return data.data
   },
 
-  updateGenre: async (id: string, input: { name: string }): Promise<Genre> => {
+  updateGenre: async (
+    id: string,
+    input: { name?: string; appliesTo?: GenreAppliesTo }
+  ): Promise<Genre> => {
     const { data } = await client.patch<{ data: Genre }>(`/genres/${id}`, input)
     return data.data
   },

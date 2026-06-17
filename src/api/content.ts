@@ -6,7 +6,7 @@ export interface ContentListParams {
   perPage?: number
   genres?: string[]                   // slugs; semántica OR (al menos uno)
   sort?: 'recent' | 'top'
-  type?: 'movie' | 'series'
+  type?: 'movie' | 'series' | 'game'
   q?: string                          // búsqueda full-text (title/originalTitle/synopsis)
   year?: number
 }

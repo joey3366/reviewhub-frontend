@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import type { Content } from '@/api/types'
+import type { Content, ContentType } from '@/api/types'
 
 const props = defineProps<{ content: Content }>()
 const router = useRouter()
 
-const typeLabel = computed(() => (props.content.type === 'movie' ? 'Película' : 'Serie'))
+const TYPE_LABEL: Record<ContentType, string> = {
+  movie: 'Película',
+  series: 'Serie',
+  game: 'Juego',
+}
+const typeLabel = computed(() => TYPE_LABEL[props.content.type])
 
 const ratingDisplay = computed(() => {
   if (props.content.avgRating === null) return null

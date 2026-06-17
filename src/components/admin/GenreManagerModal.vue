@@ -1,9 +1,16 @@
 <script setup lang="ts">
 import axios from 'axios'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { Genre } from '@/api/types'
+import type { Genre, GenreAppliesTo } from '@/api/types'
 import { adminApi } from '@/api/admin'
 import { useToast } from '@/composables/useToast'
+
+const APPLIES_TO_OPTIONS: { value: GenreAppliesTo; label: string }[] = [
+  { value: 'all', label: 'Universal' },
+  { value: 'movie', label: 'Películas' },
+  { value: 'series', label: 'Series' },
+  { value: 'game', label: 'Juegos' },
+]
 
 const toast = useToast()
 
@@ -32,6 +39,8 @@ const emit = defineEmits<{
 const dialogRef = ref<HTMLDivElement | null>(null)
 // drafts[id] = nombre tipiado para ese género; ausente = sin cambios.
 const drafts = ref<Record<string, string>>({})
+// appliesToDrafts[id] = nuevo applies_to seleccionado; ausente = sin cambios.
+const appliesToDrafts = ref<Record<string, GenreAppliesTo>>({})
 const savingId = ref<string | null>(null)
 const deletingId = ref<string | null>(null)
 const confirmingDeleteId = ref<string | null>(null)
@@ -45,15 +54,25 @@ function currentValue(g: Genre): string {
   return drafts.value[g.id] !== undefined ? drafts.value[g.id] : g.name
 }
 
+function currentAppliesTo(g: Genre): GenreAppliesTo {
+  return appliesToDrafts.value[g.id] ?? g.appliesTo
+}
+
 function hasChange(g: Genre): boolean {
-  const draft = drafts.value[g.id]
-  if (draft === undefined) return false
-  const trimmed = draft.trim()
-  return trimmed.length > 0 && trimmed !== g.name
+  const nameDraft = drafts.value[g.id]
+  const appliesDraft = appliesToDrafts.value[g.id]
+  const nameChanged =
+    nameDraft !== undefined && nameDraft.trim().length > 0 && nameDraft.trim() !== g.name
+  const appliesChanged = appliesDraft !== undefined && appliesDraft !== g.appliesTo
+  return nameChanged || appliesChanged
 }
 
 function setDraft(id: string, value: string) {
   drafts.value = { ...drafts.value, [id]: value }
+}
+
+function setAppliesToDraft(id: string, value: GenreAppliesTo) {
+  appliesToDrafts.value = { ...appliesToDrafts.value, [id]: value }
 }
 
 function clearError(id: string) {
@@ -65,18 +84,26 @@ function clearError(id: string) {
 }
 
 async function save(g: Genre) {
-  const draft = drafts.value[g.id]?.trim()
-  if (!draft || draft === g.name) return
+  if (!hasChange(g)) return
+  const nameDraft = drafts.value[g.id]?.trim()
+  const appliesDraft = appliesToDrafts.value[g.id]
+  const payload: { name?: string; appliesTo?: GenreAppliesTo } = {}
+  if (nameDraft && nameDraft !== g.name) payload.name = nameDraft
+  if (appliesDraft && appliesDraft !== g.appliesTo) payload.appliesTo = appliesDraft
+
   savingId.value = g.id
   clearError(g.id)
   try {
-    const updated = await adminApi.updateGenre(g.id, { name: draft })
+    const updated = await adminApi.updateGenre(g.id, payload)
     emit('updated', updated)
-    toast.success(`Renombrado a "${updated.name}"`)
-    // Limpiamos el draft para que el input refleje el nombre nuevo desde props.
+    toast.success(`Género "${updated.name}" actualizado`)
+    // Limpiamos drafts para que la fila refleje los valores nuevos desde props.
     const nextDrafts = { ...drafts.value }
     delete nextDrafts[g.id]
     drafts.value = nextDrafts
+    const nextApplies = { ...appliesToDrafts.value }
+    delete nextApplies[g.id]
+    appliesToDrafts.value = nextApplies
   } catch (e) {
     if (axios.isAxiosError(e)) {
       errorById.value = {
@@ -145,6 +172,7 @@ watch(
     lockScroll(open)
     if (open) {
       drafts.value = {}
+      appliesToDrafts.value = {}
       confirmingDeleteId.value = null
       errorById.value = {}
       setTimeout(() => dialogRef.value?.focus(), 0)
@@ -239,17 +267,28 @@ onBeforeUnmount(() => {
                     </button>
                   </div>
                 </div>
-                <!-- Fila normal: input + acciones -->
+                <!-- Fila normal: input + select de aplica-a + acciones -->
                 <div v-else class="flex items-center gap-2">
                   <input
                     type="text"
                     maxlength="80"
                     :value="currentValue(g)"
                     :disabled="savingId === g.id"
-                    class="h-9 flex-1 rounded-md border border-outline bg-white px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+                    class="h-9 min-w-0 flex-1 rounded-md border border-outline bg-white px-3 text-sm text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
                     @input="(e) => setDraft(g.id, (e.target as HTMLInputElement).value)"
                     @keydown.enter.prevent="hasChange(g) && save(g)"
                   />
+                  <select
+                    :value="currentAppliesTo(g)"
+                    :disabled="savingId === g.id"
+                    :title="`Aplica a: ${currentAppliesTo(g)}`"
+                    class="h-9 shrink-0 rounded-md border border-outline bg-white px-2 text-xs text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+                    @change="(e) => setAppliesToDraft(g.id, (e.target as HTMLSelectElement).value as GenreAppliesTo)"
+                  >
+                    <option v-for="opt in APPLIES_TO_OPTIONS" :key="opt.value" :value="opt.value">
+                      {{ opt.label }}
+                    </option>
+                  </select>
                   <button
                     v-if="hasChange(g)"
                     type="button"

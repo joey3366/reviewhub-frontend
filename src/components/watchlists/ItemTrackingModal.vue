@@ -43,6 +43,11 @@ const progressOpen = ref(false)
 const paceOpen = ref(false)
 
 const isSeries = computed(() => props.item?.content?.type === 'series')
+const isGame = computed(() => props.item?.content?.type === 'game')
+// Trackable = entidades con fechas y progreso parcial. Pelis se ven de una.
+const trackable = computed(() => isSeries.value || isGame.value)
+// Solo series tienen episodios; juegos llevan solo tiempo.
+const hasEpisodes = computed(() => isSeries.value)
 const title = computed(() => props.item?.content?.title ?? 'este título')
 
 function fieldValue(v: unknown): number | null {
@@ -115,25 +120,25 @@ async function save() {
   const m = fieldValue(minutes.value) ?? 0
   const s = fieldValue(seconds.value) ?? 0
   const durationSeconds = h * 3600 + m * 60 + s
-  const eps = isSeries.value ? fieldValue(episodes.value) : null
-  // Progreso parcial: solo series y solo si está empezada (con startedAt).
+  const eps = hasEpisodes.value ? fieldValue(episodes.value) : null
+  // Progreso parcial: series y juegos. Pelis se ven de una.
   const ph = fieldValue(progressHours.value) ?? 0
   const pm = fieldValue(progressMinutes.value) ?? 0
   const ps = fieldValue(progressSeconds.value) ?? 0
-  const durationProgressSeconds = isSeries.value ? ph * 3600 + pm * 60 + ps : 0
-  const progressEps = isSeries.value ? fieldValue(progressEpisodes.value) : null
+  const durationProgressSeconds = trackable.value ? ph * 3600 + pm * 60 + ps : 0
+  const progressEps = hasEpisodes.value ? fieldValue(progressEpisodes.value) : null
   // Las pelis no llevan fechas: se ven de una.
-  const start = isSeries.value ? startedAt.value || null : null
-  const finish = isSeries.value ? finishedAt.value || null : null
+  const start = trackable.value ? startedAt.value || null : null
+  const finish = trackable.value ? finishedAt.value || null : null
   if (start && finish && finish < start) {
     error.value = 'La fecha de fin no puede ser anterior a la de inicio.'
     return
   }
   saving.value = true
   try {
-    // Pace override solo aplica a series; en pelis lo dejamos null.
-    const pm = isSeries.value ? fieldValue(paceMinutes.value) : null
-    const pe = isSeries.value ? fieldValue(paceEpisodes.value) : null
+    // Pace override: series acepta minutos y episodios; juegos solo minutos.
+    const pm = trackable.value ? fieldValue(paceMinutes.value) : null
+    const pe = hasEpisodes.value ? fieldValue(paceEpisodes.value) : null
     await watchlistsApi.updateItem(props.watchlistId, props.item.id, {
       durationSeconds,
       episodesWatched: eps,
@@ -226,7 +231,7 @@ onBeforeUnmount(() => {
           </header>
 
           <p class="mt-2 text-xs text-white/40">
-            <template v-if="isSeries">
+            <template v-if="trackable">
               Con estos datos calculamos cuándo vas a terminar (pronóstico) y qué tan
               bien cumpliste tu ritmo (retrospectiva).
             </template>
@@ -239,10 +244,15 @@ onBeforeUnmount(() => {
             <!-- Plan total -->
             <div>
               <span class="text-sm font-medium text-white">
-                {{ isSeries ? 'Duración total' : 'Duración' }}
+                <template v-if="isGame">Horas estimadas (total)</template>
+                <template v-else-if="isSeries">Duración total</template>
+                <template v-else>Duración</template>
               </span>
               <p v-if="isSeries" class="mt-0.5 text-xs text-white/40">
                 Cuánto dura la serie entera. Lo usa el pronóstico.
+              </p>
+              <p v-else-if="isGame" class="mt-0.5 text-xs text-white/40">
+                Cuánto pensás que te va a llevar terminarlo. Lo usa el pronóstico.
               </p>
               <div class="mt-2 flex items-center gap-2">
                 <label class="flex flex-1 flex-col gap-1">
@@ -284,7 +294,7 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- Episodios totales (solo series) -->
-            <label v-if="isSeries" class="flex flex-col gap-1.5">
+            <label v-if="hasEpisodes" class="flex flex-col gap-1.5">
               <span class="text-sm font-medium text-white">Episodios totales</span>
               <input
                 v-model.number="episodes"
@@ -299,8 +309,8 @@ onBeforeUnmount(() => {
               </span>
             </label>
 
-            <!-- Tu progreso hasta hoy (solo series) — desplegable -->
-            <div v-if="isSeries" class="overflow-hidden rounded-lg border border-sky-400/20 bg-sky-400/[0.04]">
+            <!-- Tu progreso hasta hoy (series y juegos) — desplegable -->
+            <div v-if="trackable" class="overflow-hidden rounded-lg border border-sky-400/20 bg-sky-400/[0.04]">
               <button
                 type="button"
                 class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-sky-400/[0.06]"
@@ -361,7 +371,7 @@ onBeforeUnmount(() => {
                     <span class="text-xs text-white/40">segundos</span>
                   </label>
                 </div>
-                <label class="mt-3 flex flex-col gap-1.5">
+                <label v-if="hasEpisodes" class="mt-3 flex flex-col gap-1.5">
                   <input
                     v-model.number="progressEpisodes"
                     type="number"
@@ -375,8 +385,8 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <!-- Ritmo personalizado para ESTA serie (solo series) — desplegable -->
-            <div v-if="isSeries" class="overflow-hidden rounded-lg border border-violet-400/20 bg-violet-400/[0.04]">
+            <!-- Ritmo personalizado para ESTE título (series y juegos) — desplegable -->
+            <div v-if="trackable" class="overflow-hidden rounded-lg border border-violet-400/20 bg-violet-400/[0.04]">
               <button
                 type="button"
                 class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-violet-400/[0.06]"
@@ -385,7 +395,9 @@ onBeforeUnmount(() => {
                 @click="paceOpen = !paceOpen"
               >
                 <span class="flex flex-col gap-0.5">
-                  <span class="text-sm font-medium text-violet-200">Ritmo para esta serie</span>
+                  <span class="text-sm font-medium text-violet-200">
+                    {{ isGame ? 'Ritmo para este juego' : 'Ritmo para esta serie' }}
+                  </span>
                   <span class="text-xs text-violet-200/60">
                     <template v-if="paceSummary">{{ paceSummary }}</template>
                     <template v-else>opcional · sobrescribe tu ritmo global solo acá</template>
@@ -400,12 +412,16 @@ onBeforeUnmount(() => {
                 </svg>
               </button>
               <div v-if="paceOpen" id="pace-fields" class="border-t border-violet-400/10 px-4 pb-4 pt-3">
-                <p class="mb-3 text-xs text-violet-200/70">
+                <p v-if="isSeries" class="mb-3 text-xs text-violet-200/70">
                   Usalo cuando los episodios son muy distintos al promedio (ej. 1h vs 20min).
                   Si seteás minutos, el pronóstico de esta serie usa tiempo. Si dejás todo vacío,
                   vuelve al ritmo global de "Mi ritmo".
                 </p>
-                <div class="grid grid-cols-2 gap-3">
+                <p v-else class="mb-3 text-xs text-violet-200/70">
+                  Los juegos siempre van por tiempo (no hay episodios). Si dejás vacío
+                  vuelve al ritmo global de "Mi ritmo" en minutos.
+                </p>
+                <div :class="hasEpisodes ? 'grid grid-cols-2 gap-3' : 'grid grid-cols-1 gap-3'">
                   <label class="flex flex-col gap-1.5">
                     <input
                       v-model.number="paceMinutes"
@@ -417,7 +433,7 @@ onBeforeUnmount(() => {
                     />
                     <span class="text-xs text-white/40">min por día</span>
                   </label>
-                  <label class="flex flex-col gap-1.5">
+                  <label v-if="hasEpisodes" class="flex flex-col gap-1.5">
                     <input
                       v-model.number="paceEpisodes"
                       type="number"
@@ -432,8 +448,8 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <!-- Fechas (solo series: una peli se ve de una) -->
-            <div v-if="isSeries" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <!-- Fechas (series y juegos: las pelis se ven de una) -->
+            <div v-if="trackable" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div class="flex flex-col gap-1.5">
                 <span class="text-sm font-medium text-white">Empezaste</span>
                 <DateField v-model="startedAt" variant="dark" placeholder="Elegir fecha" aria-label="Fecha de inicio" />

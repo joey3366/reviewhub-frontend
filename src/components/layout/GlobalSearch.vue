@@ -25,6 +25,7 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null
 const typeLabel: Record<Content['type'], string> = {
   movie: 'Película',
   series: 'Serie',
+  game: 'Juego',
 }
 
 async function runSearch(q: string) {

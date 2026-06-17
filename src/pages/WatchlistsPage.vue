@@ -21,12 +21,12 @@ let rotateTimer: ReturnType<typeof setInterval> | null = null
 const loading = ref(true)
 const error = ref<string | null>(null)
 
-// Tabs por tipo: 'all' | 'movies' | 'series'. Persistido entre sesiones.
-type ListsTab = 'all' | 'movies' | 'series'
+// Tabs por tipo. Persistido entre sesiones.
+type ListsTab = 'all' | 'movies' | 'series' | 'games'
 const TAB_KEY = 'reviewhub_lists_tab'
 function readTab(): ListsTab {
   const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(TAB_KEY) : null
-  return raw === 'movies' || raw === 'series' ? raw : 'all'
+  return raw === 'movies' || raw === 'series' || raw === 'games' ? raw : 'all'
 }
 const activeTab = ref<ListsTab>(readTab())
 watch(activeTab, (v) => {
@@ -38,6 +38,7 @@ watch(activeTab, (v) => {
 const filteredLists = computed(() => {
   if (activeTab.value === 'all') return lists.value
   if (activeTab.value === 'movies') return lists.value.filter((l) => (l.moviesCount ?? 0) > 0)
+  if (activeTab.value === 'games') return lists.value.filter((l) => (l.gamesCount ?? 0) > 0)
   return lists.value.filter((l) => (l.seriesCount ?? 0) > 0)
 })
 
@@ -45,6 +46,7 @@ const counts = computed(() => ({
   all: lists.value.length,
   movies: lists.value.filter((l) => (l.moviesCount ?? 0) > 0).length,
   series: lists.value.filter((l) => (l.seriesCount ?? 0) > 0).length,
+  games: lists.value.filter((l) => (l.gamesCount ?? 0) > 0).length,
 }))
 
 // Crear
@@ -452,6 +454,23 @@ onMounted(loadLists)
           Series
           <span class="text-xs opacity-70">{{ counts.series }}</span>
         </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === 'games'"
+          class="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition-colors"
+          :class="activeTab === 'games' ? 'bg-amber-400 text-black shadow' : 'text-white/70 hover:text-white'"
+          @click="activeTab = 'games'"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+            <rect x="2" y="6" width="20" height="12" rx="2" />
+            <circle cx="8" cy="12" r="1.2" fill="currentColor" />
+            <circle cx="16" cy="12" r="1.2" fill="currentColor" />
+            <path d="M6 12h-1M18 12h1" />
+          </svg>
+          Juegos
+          <span class="text-xs opacity-70">{{ counts.games }}</span>
+        </button>
       </div>
 
       <!-- Loading -->
@@ -488,6 +507,7 @@ onMounted(loadLists)
       >
         <p class="text-lg font-semibold text-white">
           <template v-if="activeTab === 'movies'">No tenés listas con películas</template>
+          <template v-else-if="activeTab === 'games'">No tenés listas con juegos</template>
           <template v-else>No tenés listas con series</template>
         </p>
         <p class="text-sm text-white/60">

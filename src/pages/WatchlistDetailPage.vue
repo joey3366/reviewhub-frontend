@@ -148,7 +148,9 @@ async function loadWatchlist() {
 }
 
 function typeLabel(item: WatchlistItem) {
-  return item.content?.type === 'movie' ? 'Película' : 'Serie'
+  if (item.content?.type === 'movie') return 'Película'
+  if (item.content?.type === 'game') return 'Juego'
+  return 'Serie'
 }
 function ratingDisplay(item: WatchlistItem) {
   const r = item.content?.avgRating
@@ -235,7 +237,7 @@ function canForecast(item: WatchlistItem) {
   // contesta "deberías haber terminado el X" con la misma info que el forecast.
   return (
     !isInherited(item) &&
-    item.content?.type === 'series' &&
+    (item.content?.type === 'series' || item.content?.type === 'game') &&
     !item.finishedAt &&
     (item.durationSeconds > 0 || (item.episodesWatched ?? 0) > 0)
   )
@@ -246,7 +248,7 @@ function openForecast(item: WatchlistItem) {
 function canRetrospect(item: WatchlistItem) {
   return (
     !isInherited(item) &&
-    item.content?.type === 'series' &&
+    (item.content?.type === 'series' || item.content?.type === 'game') &&
     !!item.startedAt &&
     !!item.finishedAt
   )
@@ -257,7 +259,7 @@ function openRetro(item: WatchlistItem) {
 function canProgress(item: WatchlistItem) {
   return (
     !isInherited(item) &&
-    item.content?.type === 'series' &&
+    (item.content?.type === 'series' || item.content?.type === 'game') &&
     !!item.startedAt &&
     !item.finishedAt
   )

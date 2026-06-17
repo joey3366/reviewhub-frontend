@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import type { Content, Review } from '@/api/types'
+import type { Content, ContentType, GamePlatform, Review } from '@/api/types'
 import RatingStars from './RatingStars.vue'
 import WatchlistButton from '@/components/watchlists/WatchlistButton.vue'
 
@@ -19,7 +19,21 @@ const emit = defineEmits<{
 }>()
 const router = useRouter()
 
-const typeLabel = computed(() => (props.content.type === 'movie' ? 'Película' : 'Serie'))
+const TYPE_LABEL: Record<ContentType, string> = {
+  movie: 'Película',
+  series: 'Serie',
+  game: 'Juego',
+}
+const typeLabel = computed(() => TYPE_LABEL[props.content.type])
+
+const PLATFORM_LABEL: Record<GamePlatform, string> = {
+  pc: 'PC',
+  ps5: 'PS5',
+  ps4: 'PS4',
+  xbox: 'Xbox',
+  switch: 'Switch',
+  mobile: 'Mobile',
+}
 
 const runtimeLabel = computed(() => {
   if (props.content.movie?.runtimeMinutes) {
@@ -32,10 +46,16 @@ const runtimeLabel = computed(() => {
     const s = props.content.series.seasonsCount
     return `${s} ${s === 1 ? 'temporada' : 'temporadas'}`
   }
+  if (props.content.game?.hltbHours) {
+    return `≈ ${props.content.game.hltbHours}h (HLTB)`
+  }
   return null
 })
 
 const director = computed(() => props.content.movie?.director ?? null)
+const developer = computed(() => props.content.game?.developer ?? null)
+const publisher = computed(() => props.content.game?.publisher ?? null)
+const platforms = computed(() => props.content.game?.platforms ?? [])
 const reviewCountLabel = computed(() => {
   const count = props.content.reviewCount
   return `${count} ${count === 1 ? 'puntuación' : 'puntuaciones'}`
@@ -219,6 +239,31 @@ function goBack() {
           <div v-if="director" class="flex flex-col gap-1 fade-up" style="animation-delay: 420ms">
             <span class="text-sm font-semibold text-white">Director</span>
             <span class="text-sm text-white/70">{{ director }}</span>
+          </div>
+
+          <div v-if="content.type === 'game'" class="flex flex-col gap-3 fade-up" style="animation-delay: 420ms">
+            <div v-if="developer || publisher" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div v-if="developer" class="flex flex-col gap-1">
+                <span class="text-sm font-semibold text-white">Developer</span>
+                <span class="text-sm text-white/70">{{ developer }}</span>
+              </div>
+              <div v-if="publisher" class="flex flex-col gap-1">
+                <span class="text-sm font-semibold text-white">Publisher</span>
+                <span class="text-sm text-white/70">{{ publisher }}</span>
+              </div>
+            </div>
+            <div v-if="platforms.length" class="flex flex-col gap-1.5">
+              <span class="text-sm font-semibold text-white">Plataformas</span>
+              <div class="flex flex-wrap gap-2">
+                <span
+                  v-for="p in platforms"
+                  :key="p"
+                  class="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-300"
+                >
+                  {{ PLATFORM_LABEL[p] }}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

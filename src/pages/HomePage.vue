@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { contentApi } from '@/api/content'
-import type { Content, Genre, PaginationMeta } from '@/api/types'
+import type { Content, ContentType, Genre, PaginationMeta } from '@/api/types'
 import ContentCard from '@/components/content/ContentCard.vue'
 import PaginationControls from '@/components/PaginationControls.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
@@ -16,6 +16,7 @@ const error = ref<string | null>(null)
 
 const page = ref(1)
 const sort = ref<'top' | 'recent'>('top')
+const typeFilter = ref<'all' | ContentType>('all')
 // Slugs de géneros seleccionados (multi). [] = sin filtro.
 const selectedGenres = ref<string[]>([])
 
@@ -24,6 +25,22 @@ const sortOptions = [
   { value: 'recent', label: 'Más recientes' },
 ]
 
+const typeOptions = [
+  { value: 'all', label: 'Todos' },
+  { value: 'movie', label: 'Películas' },
+  { value: 'series', label: 'Series' },
+  { value: 'game', label: 'Juegos' },
+]
+
+// Géneros aplicables al tipo activo: filtramos para no mostrar pills que
+// no aplican (ej. "FPS" cuando estás viendo solo series).
+const visibleGenres = computed(() => {
+  if (typeFilter.value === 'all') return genres.value
+  return genres.value.filter(
+    (g) => g.appliesTo === 'all' || g.appliesTo === typeFilter.value
+  )
+})
+
 async function loadContents() {
   loading.value = true
   error.value = null
@@ -31,6 +48,7 @@ async function loadContents() {
     const result = await contentApi.list({
       page: page.value,
       sort: sort.value,
+      type: typeFilter.value === 'all' ? undefined : typeFilter.value,
       genres: selectedGenres.value.length > 0 ? selectedGenres.value : undefined,
     })
     contents.value = result.data
@@ -56,6 +74,17 @@ function changePage(newPage: number) {
 }
 
 watch([page, sort], loadContents)
+watch(typeFilter, () => {
+  page.value = 1
+  // Al cambiar tipo, dejamos solo géneros que sigan aplicando.
+  if (typeFilter.value !== 'all') {
+    selectedGenres.value = selectedGenres.value.filter((slug) => {
+      const g = genres.value.find((x) => x.slug === slug)
+      return g && (g.appliesTo === 'all' || g.appliesTo === typeFilter.value)
+    })
+  }
+  loadContents()
+})
 watch(selectedGenres, () => {
   page.value = 1
   loadContents()
@@ -79,8 +108,16 @@ onMounted(() => {
       </header>
 
       <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <BaseSelect v-model="sort" :options="sortOptions" label="Ordenar por" variant="dark" />
-        <GenreFilter v-if="genres.length" v-model="selectedGenres" :genres="genres" variant="dark" />
+        <div class="flex flex-col gap-4 sm:flex-row">
+          <BaseSelect v-model="typeFilter" :options="typeOptions" label="Tipo" variant="dark" />
+          <BaseSelect v-model="sort" :options="sortOptions" label="Ordenar por" variant="dark" />
+        </div>
+        <GenreFilter
+          v-if="visibleGenres.length"
+          v-model="selectedGenres"
+          :genres="visibleGenres"
+          variant="dark"
+        />
       </div>
 
       <div

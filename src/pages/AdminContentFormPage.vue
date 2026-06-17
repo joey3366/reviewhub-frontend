@@ -2,12 +2,16 @@
 import axios from 'axios'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { Content, Genre } from '@/api/types'
+import type { Content, ContentType, GamePlatform, Genre } from '@/api/types'
 import { contentApi } from '@/api/content'
 import {
   adminApi,
+  GAME_PLATFORMS,
+  GAME_PLATFORM_LABELS,
+  type CreateGameInput,
   type CreateMovieInput,
   type CreateSeriesInput,
+  type UpdateGameInput,
   type UpdateMovieInput,
   type UpdateSeriesInput,
 } from '@/api/admin'
@@ -28,7 +32,7 @@ const isEdit = computed(() => editingSlug.value !== null)
 // El id viene del fetch en edit; lo necesitamos para el PATCH (que va por id).
 const editingId = ref<string | null>(null)
 
-const type = ref<'movie' | 'series'>('movie')
+const type = ref<ContentType>('movie')
 
 // Campos comunes
 const title = ref('')
@@ -51,7 +55,26 @@ const broadcastStatus = ref<'announced' | 'airing' | 'ended'>('announced')
 const firstAired = ref('')
 const lastAired = ref('')
 
+// Solo juego
+const hltbHours = ref<number | null>(null)
+const developer = ref('')
+const publisher = ref('')
+const platforms = ref<GamePlatform[]>([])
+
+const TYPE_LABEL: Record<ContentType, string> = {
+  movie: 'Película',
+  series: 'Serie',
+  game: 'Juego',
+}
+
 const allGenres = ref<Genre[]>([])
+
+// Géneros aplicables al tipo activo. Un género se muestra si su appliesTo
+// es 'all' o coincide con el type seleccionado. Cuando el admin cambia de
+// tipo en create, desmarcamos los géneros que ya no aplican.
+const availableGenres = computed(() =>
+  allGenres.value.filter((g) => g.appliesTo === 'all' || g.appliesTo === type.value)
+)
 const loadingInitial = ref(true)
 const saving = ref(false)
 const error = ref<string | null>(null)
@@ -122,6 +145,18 @@ function applyContentToForm(c: Content) {
     firstAired.value = c.series.firstAired ?? ''
     lastAired.value = c.series.lastAired ?? ''
   }
+  if (c.type === 'game' && c.game) {
+    hltbHours.value = c.game.hltbHours
+    developer.value = c.game.developer ?? ''
+    publisher.value = c.game.publisher ?? ''
+    platforms.value = [...c.game.platforms]
+  }
+}
+
+function togglePlatform(p: GamePlatform) {
+  const i = platforms.value.indexOf(p)
+  if (i === -1) platforms.value.push(p)
+  else platforms.value.splice(i, 1)
 }
 
 async function loadForEdit(slug: string) {
@@ -179,7 +214,9 @@ async function submitNewGenre() {
   creatingGenre.value = true
   newGenreError.value = null
   try {
-    const created = await adminApi.createGenre({ name })
+    // Quick-create desde el form: el género se asocia al tipo actual. Si la
+    // admin quiere uno universal, lo edita después desde "Gestionar".
+    const created = await adminApi.createGenre({ name, appliesTo: type.value })
     // Insertamos manteniendo el orden alfabético del listado original.
     allGenres.value = [...allGenres.value, created].sort((a, b) => a.name.localeCompare(b.name))
     selectedGenreIds.value.push(created.id)
@@ -230,7 +267,7 @@ async function submit() {
         const create = buildCreateMoviePayload({ ...common, ...movieFields })
         saved = await adminApi.createMovie(create)
       }
-    } else {
+    } else if (type.value === 'series') {
       const seriesFields = {
         seasonsCount: fieldValue(seasonsCount.value),
         episodesCount: fieldValue(episodesCount.value),
@@ -244,6 +281,22 @@ async function submit() {
       } else {
         const create = buildCreateSeriesPayload({ ...common, ...seriesFields })
         saved = await adminApi.createSeries(create)
+      }
+    } else {
+      const gameFields = {
+        hltbHours: fieldValue(hltbHours.value),
+        developer: nullableString(developer.value),
+        publisher: nullableString(publisher.value),
+        // Lista vacía la mandamos como null en update para limpiar; en create
+        // omitimos la key.
+        platforms: platforms.value.length > 0 ? [...platforms.value] : null,
+      }
+      if (isEdit.value && editingId.value) {
+        const payload: UpdateGameInput = { ...common, ...gameFields }
+        saved = await adminApi.updateGame(editingId.value, payload)
+      } else {
+        const create = buildCreateGamePayload({ ...common, ...gameFields })
+        saved = await adminApi.createGame(create)
       }
     }
     if (isEdit.value) {
@@ -333,6 +386,33 @@ function buildCreateSeriesPayload(base: {
   return out
 }
 
+function buildCreateGamePayload(base: {
+  title: string
+  originalTitle: string | null
+  synopsis: string | null
+  releaseYear: number | null
+  posterUrl: string | null
+  backdropUrl: string | null
+  hltbHours: number | null
+  developer: string | null
+  publisher: string | null
+  platforms: GamePlatform[] | null
+  genres: string[]
+}): CreateGameInput {
+  const out: CreateGameInput = { title: base.title }
+  if (base.originalTitle !== null) out.originalTitle = base.originalTitle
+  if (base.synopsis !== null) out.synopsis = base.synopsis
+  if (base.releaseYear !== null) out.releaseYear = base.releaseYear
+  if (base.posterUrl !== null) out.posterUrl = base.posterUrl
+  if (base.backdropUrl !== null) out.backdropUrl = base.backdropUrl
+  if (base.hltbHours !== null) out.hltbHours = base.hltbHours
+  if (base.developer !== null) out.developer = base.developer
+  if (base.publisher !== null) out.publisher = base.publisher
+  if (base.platforms !== null && base.platforms.length > 0) out.platforms = base.platforms
+  if (base.genres.length > 0) out.genres = base.genres
+  return out
+}
+
 function cancel() {
   router.push({ name: 'admin-contents' })
 }
@@ -345,18 +425,41 @@ watch(broadcastStatus, (next) => {
 })
 
 // Reseteamos campos type-específicos cuando cambia el tipo (solo en create).
+// También desmarcamos géneros que no aplican al nuevo tipo.
 watch(type, (next, prev) => {
   if (isEdit.value || next === prev) return
+  // Limpia los géneros del tipo anterior que NO sean universales.
+  selectedGenreIds.value = selectedGenreIds.value.filter((id) => {
+    const g = allGenres.value.find((x) => x.id === id)
+    return g && (g.appliesTo === 'all' || g.appliesTo === next)
+  })
   if (next === 'movie') {
     seasonsCount.value = null
     episodesCount.value = null
     broadcastStatus.value = 'announced'
     firstAired.value = ''
     lastAired.value = ''
+    hltbHours.value = null
+    developer.value = ''
+    publisher.value = ''
+    platforms.value = []
+  } else if (next === 'series') {
+    runtimeMinutes.value = null
+    director.value = ''
+    country.value = ''
+    hltbHours.value = null
+    developer.value = ''
+    publisher.value = ''
+    platforms.value = []
   } else {
     runtimeMinutes.value = null
     director.value = ''
     country.value = ''
+    seasonsCount.value = null
+    episodesCount.value = null
+    broadcastStatus.value = 'announced'
+    firstAired.value = ''
+    lastAired.value = ''
   }
 })
 </script>
@@ -391,17 +494,20 @@ watch(type, (next, prev) => {
           <!-- Tipo (solo create) -->
           <div v-if="!isEdit" class="rounded-lg border border-white/10 bg-white/[0.04] p-4">
             <p class="mb-2 text-xs font-medium uppercase tracking-wide text-amber-300/70">Tipo</p>
-            <div class="flex gap-3">
+            <div class="flex flex-wrap gap-3">
               <label class="flex items-center gap-2 text-sm text-white/80">
                 <input v-model="type" type="radio" value="movie" class="accent-amber-400" /> Película
               </label>
               <label class="flex items-center gap-2 text-sm text-white/80">
                 <input v-model="type" type="radio" value="series" class="accent-amber-400" /> Serie
               </label>
+              <label class="flex items-center gap-2 text-sm text-white/80">
+                <input v-model="type" type="radio" value="game" class="accent-amber-400" /> Juego
+              </label>
             </div>
           </div>
           <div v-else class="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-xs text-white/60">
-            Tipo: <span class="font-medium text-white">{{ type === 'movie' ? 'Película' : 'Serie' }}</span>
+            Tipo: <span class="font-medium text-white">{{ TYPE_LABEL[type] }}</span>
             <span class="ml-2 text-white/40">(no se puede cambiar)</span>
           </div>
 
@@ -498,7 +604,7 @@ watch(type, (next, prev) => {
           </div>
 
           <!-- Solo serie -->
-          <div v-else class="grid grid-cols-1 gap-4 rounded-lg border border-white/10 bg-white/[0.04] p-4 sm:grid-cols-3">
+          <div v-else-if="type === 'series'" class="grid grid-cols-1 gap-4 rounded-lg border border-white/10 bg-white/[0.04] p-4 sm:grid-cols-3">
             <label class="flex flex-col gap-1.5">
               <span class="text-sm font-medium text-white">Temporadas</span>
               <input
@@ -538,6 +644,59 @@ watch(type, (next, prev) => {
             </div>
           </div>
 
+          <!-- Solo juego -->
+          <div v-else class="flex flex-col gap-4 rounded-lg border border-white/10 bg-white/[0.04] p-4">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <label class="flex flex-col gap-1.5">
+                <span class="text-sm font-medium text-white">Horas (HLTB)</span>
+                <input
+                  v-model.number="hltbHours"
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  placeholder="ej. 35.5"
+                  class="h-10 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 [color-scheme:dark]"
+                />
+                <span class="text-[11px] text-white/40">Main Story (HowLongToBeat)</span>
+              </label>
+              <label class="flex flex-col gap-1.5">
+                <span class="text-sm font-medium text-white">Developer</span>
+                <input
+                  v-model="developer"
+                  type="text"
+                  class="h-10 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                />
+              </label>
+              <label class="flex flex-col gap-1.5">
+                <span class="text-sm font-medium text-white">Publisher</span>
+                <input
+                  v-model="publisher"
+                  type="text"
+                  class="h-10 rounded-md border border-white/15 bg-black/30 px-3 text-sm text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                />
+              </label>
+            </div>
+            <div>
+              <p class="mb-2 text-sm font-medium text-white">Plataformas</p>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  v-for="p in GAME_PLATFORMS"
+                  :key="p"
+                  type="button"
+                  class="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
+                  :class="
+                    platforms.includes(p)
+                      ? 'border-amber-400 bg-amber-400 text-black shadow-md shadow-amber-500/20'
+                      : 'border-white/15 bg-white/[0.04] text-white/70 hover:border-amber-400/60 hover:text-amber-300'
+                  "
+                  @click="togglePlatform(p)"
+                >
+                  {{ GAME_PLATFORM_LABELS[p] }}
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Géneros (multi-select tipo pills) -->
           <div class="rounded-lg border border-white/10 bg-white/[0.04] p-4">
             <div class="mb-2 flex items-center justify-between">
@@ -556,7 +715,7 @@ watch(type, (next, prev) => {
             </div>
             <div class="flex flex-wrap gap-2">
               <button
-                v-for="g in allGenres"
+                v-for="g in availableGenres"
                 :key="g.id"
                 type="button"
                 class="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
@@ -578,6 +737,10 @@ watch(type, (next, prev) => {
                 + Nuevo género
               </button>
             </div>
+            <p v-if="availableGenres.length === 0" class="mt-1 text-xs text-white/40">
+              No hay géneros para "{{ TYPE_LABEL[type] }}". Crealos con el botón "+ Nuevo género"
+              o desde "Gestionar".
+            </p>
 
             <!-- Form inline de creación -->
             <div

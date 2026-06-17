@@ -2,7 +2,7 @@
 import axios from 'axios'
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import type { Content, Paginated } from '@/api/types'
+import type { Content, ContentType, Paginated } from '@/api/types'
 import { contentApi } from '@/api/content'
 import { adminApi } from '@/api/admin'
 import ConfirmModal from '@/components/ui/ConfirmModal.vue'
@@ -16,7 +16,23 @@ const router = useRouter()
 const page = ref(1)
 const perPage = 20
 const q = ref('')
-const typeFilter = ref<'all' | 'movie' | 'series'>('all')
+const typeFilter = ref<'all' | ContentType>('all')
+
+const TYPE_NOUN_FEM: Record<ContentType, string> = {
+  movie: 'esta película',
+  series: 'esta serie',
+  game: 'este juego',
+}
+const TYPE_LABEL: Record<ContentType, string> = {
+  movie: 'Película',
+  series: 'Serie',
+  game: 'Juego',
+}
+const TYPE_PILL_CLASS: Record<ContentType, string> = {
+  movie: 'bg-sky-500/15 text-sky-300',
+  series: 'bg-violet-500/15 text-violet-300',
+  game: 'bg-emerald-500/15 text-emerald-300',
+}
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -68,8 +84,7 @@ function askDelete(c: Content) {
 const deleteMessage = computed(() => {
   const c = toDelete.value
   if (!c) return ''
-  const label = c.type === 'movie' ? 'esta película' : 'esta serie'
-  return `¿Eliminar "${c.title}"? Esto borra ${label}, sus reseñas y la quita de las listas. No se puede deshacer.`
+  return `¿Eliminar "${c.title}"? Esto borra ${TYPE_NOUN_FEM[c.type]}, sus reseñas y la quita de las listas. No se puede deshacer.`
 })
 
 async function confirmDelete() {
@@ -77,10 +92,11 @@ async function confirmDelete() {
   if (!c) return
   deletingId.value = c.id
   const title = c.title
-  const label = c.type === 'movie' ? 'Película' : 'Serie'
+  const label = TYPE_LABEL[c.type]
   try {
     if (c.type === 'movie') await adminApi.deleteMovie(c.id)
-    else await adminApi.deleteSeries(c.id)
+    else if (c.type === 'series') await adminApi.deleteSeries(c.id)
+    else await adminApi.deleteGame(c.id)
     toDelete.value = null
     await load()
     toast.success(`${label} "${title}" eliminada`)
@@ -149,6 +165,7 @@ load()
             <option value="all" class="bg-neutral-900">Todos</option>
             <option value="movie" class="bg-neutral-900">Películas</option>
             <option value="series" class="bg-neutral-900">Series</option>
+            <option value="game" class="bg-neutral-900">Juegos</option>
           </select>
         </label>
       </div>
@@ -212,13 +229,9 @@ load()
               <td class="px-4 py-3">
                 <span
                   class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-                  :class="
-                    c.type === 'movie'
-                      ? 'bg-sky-500/15 text-sky-300'
-                      : 'bg-violet-500/15 text-violet-300'
-                  "
+                  :class="TYPE_PILL_CLASS[c.type]"
                 >
-                  {{ c.type === 'movie' ? 'Película' : 'Serie' }}
+                  {{ TYPE_LABEL[c.type] }}
                 </span>
               </td>
               <td class="px-4 py-3 tabular-nums text-white/70">{{ c.releaseYear ?? '—' }}</td>
