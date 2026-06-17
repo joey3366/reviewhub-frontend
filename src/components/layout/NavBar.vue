@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import GlobalSearch from '@/components/layout/GlobalSearch.vue'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -20,11 +21,11 @@ async function handleLogout() {
   <header
     :class="
       isDark
-        ? 'sticky top-0 z-40 bg-black/40 backdrop-blur-md'
-        : 'sticky top-0 z-40 border-b border-outline bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80'
+        ? 'sticky top-3 z-40 mt-3 bg-black/40 backdrop-blur-md'
+        : 'sticky top-3 z-40 mt-3 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80'
     "
   >
-    <div class="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
+    <div class="mx-auto flex h-14 max-w-7xl items-center gap-4 px-6">
       <RouterLink
         to="/"
         :class="
@@ -86,7 +87,11 @@ async function handleLogout() {
         </RouterLink>
       </nav>
 
-      <div class="flex items-center gap-2">
+      <div class="hidden flex-1 justify-center md:flex">
+        <GlobalSearch :variant="isDark ? 'dark' : 'light'" />
+      </div>
+
+      <div class="ml-auto flex items-center gap-2 md:ml-0">
         <template v-if="!auth.isAuthenticated">
           <RouterLink
             to="/login"

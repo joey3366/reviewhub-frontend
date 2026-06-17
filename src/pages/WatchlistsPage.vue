@@ -11,7 +11,13 @@ const toast = useToast()
 const router = useRouter()
 
 const lists = ref<Watchlist[]>([])
-const covers = ref<Record<string, string | null>>({})
+// Galería de portadas por lista: array de URLs (backdrop preferido, fallback
+// poster), DEDUP por URL. Rotamos por la card con crossfade cada ROTATE_MS.
+const covers = ref<Record<string, string[]>>({})
+const coverIndex = ref<Record<string, number>>({})
+const ROTATE_MS = 5000
+const MAX_COVERS_PER_LIST = 8
+let rotateTimer: ReturnType<typeof setInterval> | null = null
 const loading = ref(true)
 const error = ref<string | null>(null)
 
@@ -121,30 +127,60 @@ async function loadLists() {
   }
 }
 
-// listMine no trae items; la portada es el BACKDROP (banner ancho) del título
-// con MAYOR calificación de la lista. Por eso pedimos el detalle de cada una.
+// listMine no trae items; pedimos el detalle de cada lista para juntar TODAS
+// las portadas (backdrop preferido, fallback poster) y armar una galería que
+// rota en la card. Ordenamos por avgRating DESC para que el primer frame sea
+// el mejor calificado (igual que antes), pero después rotamos por el resto.
 async function loadCovers() {
   const entries = await Promise.all(
     lists.value.map(async (l) => {
       try {
         const wl = await watchlistsApi.show(l.id)
-        const best = (wl.items ?? []).reduce<NonNullable<typeof wl.items>[number] | null>(
-          (top, it) => {
-            const r = it.content?.avgRating ?? -1
-            const topR = top?.content?.avgRating ?? -1
-            return r > topR ? it : top
-          },
-          null
-        )
-        // Preferimos el banner ancho; si no hay, caemos al poster.
-        const cover = best?.content?.backdropUrl ?? best?.content?.posterUrl ?? null
-        return [l.id, cover] as const
+        const items = (wl.items ?? [])
+          .slice()
+          .sort((a, b) => (b.content?.avgRating ?? -1) - (a.content?.avgRating ?? -1))
+        const urls: string[] = []
+        const seen = new Set<string>()
+        for (const it of items) {
+          const url = it.content?.backdropUrl ?? it.content?.posterUrl
+          if (!url || seen.has(url)) continue
+          seen.add(url)
+          urls.push(url)
+          if (urls.length >= MAX_COVERS_PER_LIST) break
+        }
+        return [l.id, urls] as const
       } catch {
-        return [l.id, null] as const
+        return [l.id, [] as string[]] as const
       }
     })
   )
   covers.value = Object.fromEntries(entries)
+  // Reset de índices al recargar.
+  coverIndex.value = Object.fromEntries(entries.map(([id]) => [id, 0]))
+  startRotation()
+}
+
+function startRotation() {
+  if (rotateTimer) return
+  rotateTimer = setInterval(() => {
+    const next: Record<string, number> = { ...coverIndex.value }
+    let changed = false
+    for (const id of Object.keys(covers.value)) {
+      const arr = covers.value[id] ?? []
+      if (arr.length <= 1) continue
+      const current = next[id] ?? 0
+      next[id] = (current + 1) % arr.length
+      changed = true
+    }
+    if (changed) coverIndex.value = next
+  }, ROTATE_MS)
+}
+
+function stopRotation() {
+  if (rotateTimer) {
+    clearInterval(rotateTimer)
+    rotateTimer = null
+  }
 }
 
 function itemsLabel(n: number | undefined) {
@@ -167,7 +203,8 @@ async function submitCreate() {
   try {
     const wl = await watchlistsApi.create({ name })
     lists.value.unshift(wl)
-    covers.value = { ...covers.value, [wl.id]: null }
+    covers.value = { ...covers.value, [wl.id]: [] }
+    coverIndex.value = { ...coverIndex.value, [wl.id]: 0 }
     persistOrder()
     showCreate.value = false
     newName.value = ''
@@ -272,7 +309,10 @@ watch(menuOpenId, (v) => {
   if (v) document.addEventListener('click', closeMenus)
   else document.removeEventListener('click', closeMenus)
 })
-onBeforeUnmount(() => document.removeEventListener('click', closeMenus))
+onBeforeUnmount(() => {
+  document.removeEventListener('click', closeMenus)
+  stopRotation()
+})
 
 onMounted(loadLists)
 </script>
@@ -479,14 +519,25 @@ onMounted(loadLists)
           @dragover.prevent
           @dragend="onDragEnd"
         >
-          <!-- Portada -->
-          <div class="absolute inset-0">
-            <div
-              v-if="covers[list.id]"
-              class="h-full w-full bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
-              :style="{ backgroundImage: `url(${covers[list.id]})` }"
-            />
-            <div v-else class="h-full w-full bg-gradient-to-br from-amber-500/20 via-zinc-900 to-black" />
+          <!-- Portada: galería rotante con crossfade entre los backdrops de
+               los items. Si la lista está vacía caemos al gradiente dorado.
+               El scale del hover va en el wrapper para que afecte a todos
+               los layers a la vez sin pelearse con el transition-opacity. -->
+          <div class="absolute inset-0 overflow-hidden">
+            <div class="absolute inset-0 transition-transform duration-700 group-hover:scale-105">
+              <template v-if="(covers[list.id] ?? []).length > 0">
+                <div
+                  v-for="(url, i) in covers[list.id]"
+                  :key="url"
+                  class="absolute inset-0 h-full w-full bg-cover bg-center transition-opacity duration-[1200ms] ease-in-out"
+                  :style="{
+                    backgroundImage: `url(${url})`,
+                    opacity: i === (coverIndex[list.id] ?? 0) ? 1 : 0,
+                  }"
+                />
+              </template>
+              <div v-else class="h-full w-full bg-gradient-to-br from-amber-500/20 via-zinc-900 to-black" />
+            </div>
             <div class="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/20" />
           </div>
 
