@@ -1,0 +1,18 @@
+{
+  // Config para Cloudflare Pages (Workers Assets).
+  // `not_found_handling: "single-page-application"` hace que CF sirva
+  // /index.html en cualquier ruta no encontrada. Lo necesitamos porque
+  // Vue Router corre en history mode (URLs limpias) y un refresh en
+  // /watchlists o /contents/:slug devolvería 404 sin esta regla.
+  //
+  // Antes usábamos public/_redirects con "/* /index.html 200", pero
+  // el nuevo linter de CF Workers Assets lo rechaza ("infinite loop
+  // detected") porque CF strippea ".html" e "/index" por defecto y
+  // arma un ciclo en su detección. Esta config nativa lo evita.
+  "name": "kairos",
+  "compatibility_date": "2024-12-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
