@@ -39,8 +39,8 @@ const bodyCount = computed(() => form.body.trim().length)
 
 function validate(): boolean {
   const errs: Record<string, string> = {}
-  if (form.rating < 1 || form.rating > 10) {
-    errs.rating = 'Elegí una calificación entre 1 y 10.'
+  if (form.rating < 0.5 || form.rating > 10 || !Number.isInteger(form.rating * 2)) {
+    errs.rating = 'Elegí una calificación entre 0.5 y 10.'
   }
   // Título y body son opcionales: solo se validan si escribiste algo.
   if (titleCount.value > 0 && titleCount.value < TITLE_MIN) {
