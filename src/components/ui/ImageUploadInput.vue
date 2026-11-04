@@ -181,7 +181,7 @@ function applyUrl() {
 
     <!-- Preview cuando ya hay URL -->
     <div v-if="hasValue && !uploading" class="flex items-start gap-3">
-      <div :class="['shrink-0 overflow-hidden rounded border', styles.preview, aspectClass === 'aspect-[2/3]' ? 'h-40 w-28' : 'h-24 w-40']">
+      <div :class="['shrink-0 overflow-hidden rounded border', styles.preview, aspectClass === 'aspect-[2/3]' ? 'h-40 w-28' : ['w-56', aspectClass]]">
         <img :src="modelValue" :alt="label" class="h-full w-full object-cover" @error="error = 'No se pudo cargar la imagen desde esa URL.'" />
       </div>
       <div class="flex min-w-0 flex-1 flex-col gap-1.5">

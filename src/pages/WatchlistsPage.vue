@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { backdropPosition } from '@/lib/backdrop'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { Watchlist } from '@/api/types'
@@ -14,6 +15,8 @@ const lists = ref<Watchlist[]>([])
 // Galería de portadas por lista: array de URLs (backdrop preferido, fallback
 // poster), DEDUP por URL. Rotamos por la card con crossfade cada ROTATE_MS.
 const covers = ref<Record<string, string[]>>({})
+// url → background-position (punto de enfoque del backdrop; posters al centro).
+const coverPos = ref<Record<string, string>>({})
 const coverIndex = ref<Record<string, number>>({})
 const ROTATE_MS = 5000
 const MAX_COVERS_PER_LIST = 8
@@ -147,6 +150,7 @@ async function loadCovers() {
           const url = it.content?.backdropUrl ?? it.content?.posterUrl
           if (!url || seen.has(url)) continue
           seen.add(url)
+          coverPos.value[url] = it.content?.backdropUrl ? backdropPosition(it.content) : 'center'
           urls.push(url)
           if (urls.length >= MAX_COVERS_PER_LIST) break
         }
@@ -549,9 +553,10 @@ onMounted(loadLists)
                 <div
                   v-for="(url, i) in covers[list.id]"
                   :key="url"
-                  class="absolute inset-0 h-full w-full bg-cover bg-center transition-opacity duration-[1200ms] ease-in-out"
+                  class="absolute inset-0 h-full w-full bg-cover transition-opacity duration-[1200ms] ease-in-out"
                   :style="{
                     backgroundImage: `url(${url})`,
+                    backgroundPosition: coverPos[url] ?? 'center',
                     opacity: i === (coverIndex[list.id] ?? 0) ? 1 : 0,
                   }"
                 />

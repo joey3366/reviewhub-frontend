@@ -18,6 +18,9 @@ export interface CreateMovieInput {
   releaseYear?: number
   posterUrl?: string
   backdropUrl?: string
+  backdropFocusX?: number
+  backdropFocusY?: number
+  backdropFit?: 'cover' | 'contain'
   runtimeMinutes?: number
   director?: string
   country?: string                       // ISO-3166 alpha-2 (ej. "AR")
@@ -31,6 +34,9 @@ export type UpdateMovieInput = {
   releaseYear?: number | null
   posterUrl?: string | null
   backdropUrl?: string | null
+  backdropFocusX?: number | null
+  backdropFocusY?: number | null
+  backdropFit?: 'cover' | 'contain' | null
   runtimeMinutes?: number | null
   director?: string | null
   country?: string | null
@@ -44,6 +50,9 @@ export interface CreateSeriesInput {
   releaseYear?: number
   posterUrl?: string
   backdropUrl?: string
+  backdropFocusX?: number
+  backdropFocusY?: number
+  backdropFit?: 'cover' | 'contain'
   seasonsCount?: number
   episodesCount?: number
   broadcastStatus?: 'announced' | 'airing' | 'ended'
@@ -59,6 +68,9 @@ export type UpdateSeriesInput = {
   releaseYear?: number | null
   posterUrl?: string | null
   backdropUrl?: string | null
+  backdropFocusX?: number | null
+  backdropFocusY?: number | null
+  backdropFit?: 'cover' | 'contain' | null
   seasonsCount?: number | null
   episodesCount?: number | null
   broadcastStatus?: 'announced' | 'airing' | 'ended'
@@ -86,6 +98,9 @@ export interface CreateGameInput {
   releaseYear?: number
   posterUrl?: string
   backdropUrl?: string
+  backdropFocusX?: number
+  backdropFocusY?: number
+  backdropFit?: 'cover' | 'contain'
   hltbHours?: number
   developer?: string
   publisher?: string
@@ -100,6 +115,9 @@ export type UpdateGameInput = {
   releaseYear?: number | null
   posterUrl?: string | null
   backdropUrl?: string | null
+  backdropFocusX?: number | null
+  backdropFocusY?: number | null
+  backdropFit?: 'cover' | 'contain' | null
   hltbHours?: number | null
   developer?: string | null
   publisher?: string | null

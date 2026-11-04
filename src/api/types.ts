@@ -49,6 +49,11 @@ export interface Content {
   releaseYear: number | null
   posterUrl: string | null
   backdropUrl: string | null
+  /** Punto de enfoque del backdrop, 0–100. null = default (ver lib/backdrop). */
+  backdropFocusX: number | null
+  backdropFocusY: number | null
+  /** 'cover' | 'contain' | null (null = automático). Ver lib/backdrop. */
+  backdropFit: 'cover' | 'contain' | null
   avgRating: number | null
   reviewCount: number
   genres: Genre[]
@@ -100,6 +105,10 @@ export interface WatchlistItemContent {
   type: ContentType
   posterUrl: string | null
   backdropUrl: string | null
+  backdropFocusX: number | null
+  backdropFocusY: number | null
+  /** 'cover' | 'contain' | null (null = automático). Ver lib/backdrop. */
+  backdropFit: 'cover' | 'contain' | null
   avgRating: number | null
 }
 

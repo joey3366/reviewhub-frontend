@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { Content, ContentType, GamePlatform, Review } from '@/api/types'
 import RatingStars from './RatingStars.vue'
+import BackdropLayer from './BackdropLayer.vue'
 import WatchlistButton from '@/components/watchlists/WatchlistButton.vue'
 
 const props = withDefaults(
@@ -101,25 +102,26 @@ function goBack() {
 <template>
   <section class="relative min-h-[720px] overflow-hidden">
     <div
-      class="pointer-events-none absolute inset-0 -top-10"
+      class="pointer-events-none absolute inset-x-0 top-0 h-[560px] overflow-hidden md:inset-0 md:h-auto"
       :style="{ transform: `translate3d(0, ${backdropOffset}px, 0)` }"
     >
-      <div
+      <BackdropLayer
         v-if="content.backdropUrl"
-        class="ken-burns absolute inset-0 bg-cover bg-center"
-        :style="{ backgroundImage: `url(${content.backdropUrl})` }"
+        :url="content.backdropUrl"
+        :focus-x="content.backdropFocusX"
+        :focus-y="content.backdropFocusY"
+        :fit="content.backdropFit"
       />
-      <div v-else class="absolute inset-0 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black" />
-
-      <div class="absolute inset-0 bg-gradient-to-r from-black via-black/85 to-transparent" />
-      <div class="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black to-transparent" />
-      <div class="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/70 to-transparent" />
+      <template v-else>
+        <div class="absolute inset-0 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black" />
+        <div class="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black to-transparent" />
+      </template>
     </div>
 
-    <div class="relative mx-auto max-w-7xl px-6 pb-16 pt-8 md:pb-20 md:pt-10">
+    <div class="relative mx-auto max-w-7xl px-5 pb-12 pt-6 md:px-6 md:pb-20 md:pt-10">
       <button
         type="button"
-        class="mb-8 inline-flex items-center gap-2 text-sm font-medium text-white/70 transition-colors hover:text-white"
+        class="mb-5 inline-flex items-center gap-2 text-sm font-medium text-white/70 transition-colors hover:text-white"
         @click="goBack"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
@@ -128,8 +130,8 @@ function goBack() {
         Volver
       </button>
 
-      <div class="flex flex-col gap-10 md:flex-row md:gap-12">
-        <div class="flex w-full max-w-[280px] flex-none flex-col gap-6 self-center md:self-start fade-up">
+      <div class="flex flex-col gap-6 md:flex-row md:gap-12">
+        <div class="flex w-full max-w-[170px] flex-none flex-col items-center gap-4 self-center sm:max-w-[220px] md:max-w-[280px] md:items-stretch md:gap-6 md:self-start fade-up">
           <div class="aspect-[2/3] w-full overflow-hidden rounded-lg border border-white/10 bg-white/5 shadow-2xl shadow-black/50">
             <img
               v-if="content.posterUrl"
@@ -160,7 +162,7 @@ function goBack() {
             </template>
           </div>
 
-          <h1 class="text-5xl font-bold leading-[1.05] tracking-tight md:text-7xl fade-up" style="animation-delay: 120ms">
+          <h1 class="text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl md:text-7xl fade-up" style="animation-delay: 120ms">
             {{ content.title }}
           </h1>
 
@@ -272,16 +274,6 @@ function goBack() {
 </template>
 
 <style scoped>
-@keyframes kenBurns {
-  0% { transform: scale(1.05) translate(0, 0); }
-  50% { transform: scale(1.18) translate(-2%, -1.5%); }
-  100% { transform: scale(1.05) translate(0, 0); }
-}
-.ken-burns {
-  animation: kenBurns 32s ease-in-out infinite;
-  transform-origin: center;
-}
-
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: translateY(0); }
@@ -308,7 +300,6 @@ function goBack() {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ken-burns,
   .fade-up,
   .avg-star {
     animation: none;

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { backdropPosition } from '@/lib/backdrop'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { Watchlist, WatchlistItem } from '@/api/types'
@@ -56,6 +57,15 @@ const backdrops = computed(() => {
     .map((it) => it.content?.backdropUrl ?? it.content?.posterUrl ?? null)
     .filter((u): u is string => !!u)
   return [...new Set(urls)]
+})
+// url → background-position (punto de enfoque del backdrop; posters al centro).
+const backdropPos = computed(() => {
+  const map: Record<string, string> = {}
+  for (const it of items.value) {
+    const c = it.content
+    if (c?.backdropUrl) map[c.backdropUrl] = backdropPosition(c)
+  }
+  return map
 })
 
 const currentBg = ref(0)
@@ -283,8 +293,12 @@ watch(id, loadWatchlist, { immediate: true })
       <div
         v-for="(url, i) in backdrops"
         :key="url"
-        class="ken-burns absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out"
-        :style="{ backgroundImage: `url(${url})`, opacity: i === currentBg ? 0.6 : 0 }"
+        class="ken-burns absolute inset-0 bg-cover transition-opacity duration-1000 ease-in-out"
+        :style="{
+          backgroundImage: `url(${url})`,
+          backgroundPosition: backdropPos[url] ?? 'center',
+          opacity: i === currentBg ? 0.6 : 0,
+        }"
       />
       <div class="absolute inset-0 bg-gradient-to-b from-black/70 via-black/55 to-black/95" />
     </div>
@@ -432,8 +446,8 @@ watch(id, loadWatchlist, { immediate: true })
               <button
                 v-if="!isInherited(item)"
                 type="button"
-                class="absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 opacity-0 backdrop-blur-sm transition-opacity hover:bg-amber-500/80 hover:text-black group-hover:opacity-100"
-                :class="hasTracking(item) ? 'text-amber-300 opacity-100' : 'text-white/90'"
+                class="absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 [@media(hover:hover)]:opacity-0 backdrop-blur-sm transition-opacity hover:bg-amber-500/80 hover:text-black group-hover:opacity-100"
+                :class="hasTracking(item) ? 'text-amber-300 [@media(hover:hover)]:opacity-100' : 'text-white/90'"
                 :aria-label="`Editar seguimiento de ${item.content?.title}`"
                 title="Seguimiento: duración, episodios y fechas"
                 @click="openTracking(item)"
@@ -447,7 +461,7 @@ watch(id, loadWatchlist, { immediate: true })
               <button
                 v-if="!isInherited(item)"
                 type="button"
-                class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white/90 opacity-0 backdrop-blur-sm transition-opacity hover:bg-red-500/80 group-hover:opacity-100 disabled:opacity-50"
+                class="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white/90 [@media(hover:hover)]:opacity-0 backdrop-blur-sm transition-opacity hover:bg-red-500/80 group-hover:opacity-100 disabled:opacity-50"
                 :disabled="removingId === item.id"
                 :aria-label="`Quitar ${item.content?.title} de la lista`"
                 title="Quitar de la lista"

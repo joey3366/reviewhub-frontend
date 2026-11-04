@@ -16,6 +16,7 @@ import {
   type UpdateSeriesInput,
 } from '@/api/admin'
 import ImageUploadInput from '@/components/ui/ImageUploadInput.vue'
+import BackdropFocusPicker from '@/components/admin/BackdropFocusPicker.vue'
 import DateField from '@/components/ui/DateField.vue'
 import GenreManagerModal from '@/components/admin/GenreManagerModal.vue'
 import FormBackdrop from '@/components/ui/FormBackdrop.vue'
@@ -41,6 +42,11 @@ const synopsis = ref('')
 const releaseYear = ref<number | null>(null)
 const posterUrl = ref('')
 const backdropUrl = ref('')
+// Punto de enfoque del backdrop (0–100). null = default del banner.
+const backdropFocusX = ref<number | null>(null)
+const backdropFocusY = ref<number | null>(null)
+// Ajuste: 'cover' | 'contain' | null (automático).
+const backdropFit = ref<'cover' | 'contain' | null>(null)
 const selectedGenreIds = ref<string[]>([])
 
 // Solo movie
@@ -132,6 +138,9 @@ function applyContentToForm(c: Content) {
   releaseYear.value = c.releaseYear
   posterUrl.value = c.posterUrl ?? ''
   backdropUrl.value = c.backdropUrl ?? ''
+  backdropFocusX.value = c.backdropFocusX ?? null
+  backdropFocusY.value = c.backdropFocusY ?? null
+  backdropFit.value = c.backdropFit ?? null
   selectedGenreIds.value = c.genres.map((g) => g.id)
   if (c.type === 'movie' && c.movie) {
     runtimeMinutes.value = c.movie.runtimeMinutes
@@ -250,6 +259,10 @@ async function submit() {
       releaseYear: fieldValue(releaseYear.value),
       posterUrl: nullableString(posterUrl.value),
       backdropUrl: nullableString(backdropUrl.value),
+      // Sin backdrop el foco no tiene sentido → lo limpiamos.
+      backdropFocusX: backdropUrl.value.trim() ? backdropFocusX.value : null,
+      backdropFocusY: backdropUrl.value.trim() ? backdropFocusY.value : null,
+      backdropFit: backdropUrl.value.trim() ? backdropFit.value : null,
       genres: selectedGenreIds.value,
     }
     let saved: Content
@@ -340,6 +353,9 @@ function buildCreateMoviePayload(base: {
   releaseYear: number | null
   posterUrl: string | null
   backdropUrl: string | null
+  backdropFocusX: number | null
+  backdropFocusY: number | null
+  backdropFit: 'cover' | 'contain' | null
   runtimeMinutes: number | null
   director: string | null
   country: string | null
@@ -351,6 +367,9 @@ function buildCreateMoviePayload(base: {
   if (base.releaseYear !== null) out.releaseYear = base.releaseYear
   if (base.posterUrl !== null) out.posterUrl = base.posterUrl
   if (base.backdropUrl !== null) out.backdropUrl = base.backdropUrl
+  if (base.backdropFocusX !== null) out.backdropFocusX = base.backdropFocusX
+  if (base.backdropFocusY !== null) out.backdropFocusY = base.backdropFocusY
+  if (base.backdropFit !== null) out.backdropFit = base.backdropFit
   if (base.runtimeMinutes !== null) out.runtimeMinutes = base.runtimeMinutes
   if (base.director !== null) out.director = base.director
   if (base.country !== null) out.country = base.country
@@ -365,6 +384,9 @@ function buildCreateSeriesPayload(base: {
   releaseYear: number | null
   posterUrl: string | null
   backdropUrl: string | null
+  backdropFocusX: number | null
+  backdropFocusY: number | null
+  backdropFit: 'cover' | 'contain' | null
   seasonsCount: number | null
   episodesCount: number | null
   broadcastStatus: 'announced' | 'airing' | 'ended'
@@ -378,6 +400,9 @@ function buildCreateSeriesPayload(base: {
   if (base.releaseYear !== null) out.releaseYear = base.releaseYear
   if (base.posterUrl !== null) out.posterUrl = base.posterUrl
   if (base.backdropUrl !== null) out.backdropUrl = base.backdropUrl
+  if (base.backdropFocusX !== null) out.backdropFocusX = base.backdropFocusX
+  if (base.backdropFocusY !== null) out.backdropFocusY = base.backdropFocusY
+  if (base.backdropFit !== null) out.backdropFit = base.backdropFit
   if (base.seasonsCount !== null) out.seasonsCount = base.seasonsCount
   if (base.episodesCount !== null) out.episodesCount = base.episodesCount
   if (base.firstAired !== null) out.firstAired = base.firstAired
@@ -393,6 +418,9 @@ function buildCreateGamePayload(base: {
   releaseYear: number | null
   posterUrl: string | null
   backdropUrl: string | null
+  backdropFocusX: number | null
+  backdropFocusY: number | null
+  backdropFit: 'cover' | 'contain' | null
   hltbHours: number | null
   developer: string | null
   publisher: string | null
@@ -405,6 +433,9 @@ function buildCreateGamePayload(base: {
   if (base.releaseYear !== null) out.releaseYear = base.releaseYear
   if (base.posterUrl !== null) out.posterUrl = base.posterUrl
   if (base.backdropUrl !== null) out.backdropUrl = base.backdropUrl
+  if (base.backdropFocusX !== null) out.backdropFocusX = base.backdropFocusX
+  if (base.backdropFocusY !== null) out.backdropFocusY = base.backdropFocusY
+  if (base.backdropFit !== null) out.backdropFit = base.backdropFit
   if (base.hltbHours !== null) out.hltbHours = base.hltbHours
   if (base.developer !== null) out.developer = base.developer
   if (base.publisher !== null) out.publisher = base.publisher
@@ -564,12 +595,23 @@ watch(type, (next, prev) => {
               />
               <ImageUploadInput
                 v-model="backdropUrl"
-                label="Backdrop (horizontal, 16:9)"
+                label="Backdrop (panorámico ~21:9, ej. 2560×1080)"
                 folder="reviewhub/covers/backdrops"
-                aspect-class="aspect-video"
+                aspect-class="aspect-[21/9]"
                 variant="dark"
               />
             </div>
+            <BackdropFocusPicker
+              v-if="backdropUrl.trim()"
+              class="mt-4"
+              :url="backdropUrl.trim()"
+              :x="backdropFocusX"
+              :y="backdropFocusY"
+              :fit="backdropFit"
+              @update:x="backdropFocusX = $event"
+              @update:y="backdropFocusY = $event"
+              @update:fit="backdropFit = $event"
+            />
           </div>
 
           <!-- Solo película -->
