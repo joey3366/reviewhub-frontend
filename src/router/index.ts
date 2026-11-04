@@ -72,8 +72,10 @@ const router = createRouter({
   },
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
+  // Para decidir si es admin necesitamos el perfil (el rol), no solo el token.
+  if (to.meta.requiresAdmin) await auth.ensureProfile()
   if (to.meta.guest && auth.isAuthenticated) return { path: '/' }
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { path: '/login', query: { redirect: to.fullPath } }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import axios from 'axios'
 import { computed, onMounted, ref, watch } from 'vue'
 import { contentApi } from '@/api/content'
 import type { Content, ContentType, Genre, PaginationMeta } from '@/api/types'
@@ -54,7 +55,12 @@ async function loadContents() {
     contents.value = result.data
     meta.value = result.metadata
   } catch (e) {
-    error.value = 'No pudimos cargar el catálogo. Asegurate que el backend esté corriendo en localhost:3333.'
+    // Sin respuesta = red caída o servidor dormido (Render free tarda
+    // ~30-60s en despertar). Con respuesta = el servidor rechazó el pedido.
+    error.value =
+      axios.isAxiosError(e) && !e.response
+        ? 'No pudimos conectar con el servidor. Si hace rato nadie entra, puede estar despertando: probá de nuevo en unos segundos.'
+        : 'No pudimos cargar el catálogo con estos filtros. Probá de nuevo o cambiá la selección.'
     console.error(e)
   } finally {
     loading.value = false

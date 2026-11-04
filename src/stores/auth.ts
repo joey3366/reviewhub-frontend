@@ -4,6 +4,10 @@ import type { AuthUser } from '@/api/types'
 
 const TOKEN_KEY = 'reviewhub_token'
 
+// Request de perfil en vuelo, compartida entre main.ts y el guard del router
+// para no pedir /profile dos veces al cargar la app.
+let profilePromise: Promise<void> | null = null
+
 interface AuthState {
   token: string | null
   user: AuthUser | null
@@ -48,6 +52,22 @@ export const useAuthStore = defineStore('auth', {
 
     async refreshProfile() {
       this.user = await authApi.profile()
+    },
+
+    /**
+     * Garantiza que `user` esté cargado si hay token. Al recargar la página
+     * el token sale de localStorage pero el perfil (y con él el rol) llega
+     * después; sin esperar esto, el guard de admin veía isAdmin=false y
+     * redirigía al catálogo.
+     */
+    async ensureProfile() {
+      if (!this.token || this.user) return
+      profilePromise ??= this.refreshProfile()
+        .catch(() => this.clear())
+        .finally(() => {
+          profilePromise = null
+        })
+      await profilePromise
     },
 
     setSession(token: string, user: AuthUser) {

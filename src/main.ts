@@ -14,8 +14,6 @@ app.use(createPinia())
 app.use(router)
 
 const auth = useAuthStore()
-if (auth.token) {
-  auth.refreshProfile().catch(() => auth.clear())
-}
+void auth.ensureProfile()
 
 app.mount('#app')
