@@ -1,5 +1,5 @@
 {
-  // Config para Cloudflare Pages (Workers Assets).
+  // Config para Cloudflare Workers (Assets + script).
   // `not_found_handling: "single-page-application"` hace que CF sirva
   // /index.html en cualquier ruta no encontrada. Lo necesitamos porque
   // Vue Router corre en history mode (URLs limpias) y un refresh en
@@ -11,8 +11,23 @@
   // arma un ciclo en su detección. Esta config nativa lo evita.
   "name": "kairos",
   "compatibility_date": "2024-12-01",
+
+  // Script del Worker: sirve la SPA y corre el keep-alive del backend.
+  "main": "worker/index.js",
+
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS"
+  },
+
+  // Keep-alive: cada 10 min le pega al backend de Render para que no se
+  // duerma (Render free lo apaga tras 15 min sin tráfico). Ver worker/index.js.
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  },
+
+  "vars": {
+    "KEEPALIVE_URL": "https://kairos-api-1hn3.onrender.com/api/v1/genres"
   }
 }
