@@ -18,6 +18,7 @@ const isDark = computed(() => route.meta.fullBleed === true)
 const links = computed(() =>
   [
     { to: '/', label: 'Catálogo', show: true },
+    { to: '/franquicias', label: 'Franquicias', show: true },
     { to: '/watchlists', label: 'Mis listas', show: auth.isAuthenticated },
     { to: '/ritmo', label: 'Mi ritmo', show: auth.isAuthenticated },
     { to: '/admin/contents', label: 'Admin', show: auth.isAdmin },

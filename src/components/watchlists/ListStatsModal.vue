@@ -328,7 +328,10 @@ onBeforeUnmount(() => {
                     class="flex items-start justify-between gap-2 px-4 py-2.5 text-xs"
                   >
                     <div class="min-w-0">
-                      <p class="truncate text-white">{{ it.title }}</p>
+                      <p class="truncate text-white">
+                        {{ it.title }}
+                        <span v-if="it.groupedCount" class="text-amber-200/70">+{{ it.groupedCount }} unido{{ it.groupedCount === 1 ? '' : 's' }}</span>
+                      </p>
                       <p class="text-white/45">
                         {{ formatMedium(it.startedAt) }}
                         <template v-if="it.finishedAt"> → {{ formatMedium(it.finishedAt) }}</template>

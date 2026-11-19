@@ -117,6 +117,10 @@ export interface WatchlistItem {
   watchlistId: string
   contentId: string
   position: number
+  /** Item principal al que está unido (misma lista), o null si va suelto. */
+  parentItemId: string | null
+  /** Nombre del grupo (solo en el principal). null = se muestra el título. */
+  groupName: string | null
   durationSeconds: number          // duración TOTAL planificada del título
   durationFormatted: string        // ej. "2h 30m" (lo arma el backend)
   episodesWatched: number | null   // episodios TOTALES de la serie
@@ -191,6 +195,14 @@ export interface Holiday {
 /** Qué dimensión del ritmo se usó para calcular. */
 export type ForecastMode = 'time' | 'episodes'
 
+/** Un título unido que se sumó al cálculo de su principal. */
+export interface GroupedSummary {
+  title: string
+  type: string
+  durationSeconds: number
+  episodes: number                // los suyos, o 1 si no tiene (película, juego)
+}
+
 /** El ritmo efectivo que terminó usando un cálculo (settings + overrides). */
 export interface ForecastPace {
   dailyMinutes: number | null
@@ -209,6 +221,7 @@ export interface Forecast {
   skippedDays: number             // días salteados dentro del rango
   totalCalendarDays: number       // días de calendario de punta a punta
   pace: ForecastPace
+  grouped?: GroupedSummary[]      // títulos unidos incluidos en el cálculo
 }
 
 /**
@@ -231,6 +244,7 @@ export interface Progress {
   onPace: boolean
   progressLogged: boolean           // false = no cargaste progreso aún
   pace: ForecastPace
+  grouped?: GroupedSummary[]        // títulos unidos incluidos en el cálculo
 }
 
 /**
@@ -278,6 +292,7 @@ export interface ListStats {
     startedAt: string          // yyyy-MM-dd
     finishedAt: string | null  // null = in-flight
     viaWatchlistName: string | null  // null si es propio del watchlist
+    groupedCount?: number            // items unidos sumados a este
   }>
 }
 
@@ -295,4 +310,46 @@ export interface Retrospective {
   toleranceDays: number           // margen tolerado (10% de expectedDays, mín 1)
   onPace: boolean                 // |deviationDays| <= toleranceDays
   pace: ForecastPace
+  grouped?: GroupedSummary[]      // títulos unidos incluidos en el cálculo
+}
+
+// ── Franquicias ────────────────────────────────────────────────
+
+/** Estado de un título de la franquicia para quien mira (null si anónimo). */
+export type FranchiseViewerStatus = 'watched' | 'in_list' | 'none'
+
+export interface FranchiseContent {
+  id: string
+  slug: string
+  title: string
+  type: ContentType
+  status: string
+  releaseYear: number | null
+  posterUrl: string | null
+  avgRating: number | null
+  runtimeMinutes: number | null
+  seasonsCount: number | null
+  episodesCount: number | null
+  hltbHours: number | null
+  position: number
+  viewerStatus: FranchiseViewerStatus | null
+}
+
+/** Franquicia del catálogo (ej. Scooby-Doo). La administra el admin. */
+export interface Franchise {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  backdropUrl: string | null
+  backdropFocusX: number | null
+  backdropFocusY: number | null
+  backdropFit: 'cover' | 'contain' | null
+  contentsCount?: number
+  counts?: { movie: number; series: number; game: number }
+  contents?: FranchiseContent[]
+  /** Solo con sesión: cuántos viste / tenés en listas sin terminar. */
+  viewer?: { watchedCount: number; inListCount: number }
+  createdAt: string
+  updatedAt: string | null
 }

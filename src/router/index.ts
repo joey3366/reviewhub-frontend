@@ -27,6 +27,18 @@ const routes: RouteRecordRaw[] = [
     meta: { fullBleed: true },
   },
   {
+    path: '/franquicias',
+    name: 'franchises',
+    component: () => import('@/pages/FranchisesPage.vue'),
+    meta: { fullBleed: true },
+  },
+  {
+    path: '/franquicias/:slug',
+    name: 'franchise',
+    component: () => import('@/pages/FranchisePage.vue'),
+    meta: { fullBleed: true },
+  },
+  {
     path: '/watchlists',
     name: 'watchlists',
     component: () => import('@/pages/WatchlistsPage.vue'),
@@ -54,6 +66,24 @@ const routes: RouteRecordRaw[] = [
     path: '/admin/contents/new',
     name: 'admin-content-new',
     component: () => import('@/pages/AdminContentFormPage.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, fullBleed: true },
+  },
+  {
+    path: '/admin/franchises',
+    name: 'admin-franchises',
+    component: () => import('@/pages/AdminFranchisesPage.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, fullBleed: true },
+  },
+  {
+    path: '/admin/franchises/new',
+    name: 'admin-franchise-new',
+    component: () => import('@/pages/AdminFranchiseFormPage.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, fullBleed: true },
+  },
+  {
+    path: '/admin/franchises/:slug/edit',
+    name: 'admin-franchise-edit',
+    component: () => import('@/pages/AdminFranchiseFormPage.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, fullBleed: true },
   },
   {

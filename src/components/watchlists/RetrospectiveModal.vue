@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import GroupedNote from './GroupedNote.vue'
 import axios from 'axios'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -272,6 +273,7 @@ onBeforeUnmount(() => {
                 <span v-if="retro.actualSkippedDays > 0">{{ retro.actualSkippedDays }} salteados</span>
               </p>
 
+              <GroupedNote :grouped="retro?.grouped" :mode="retro?.mode ?? 'time'" />
               <p class="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-white/40">
                 <span>A tu ritmo: <span class="text-amber-200/70">{{ paceLabel }}</span></span>
                 <span v-if="retro.pace.skipHolidays">· salteando feriados</span>

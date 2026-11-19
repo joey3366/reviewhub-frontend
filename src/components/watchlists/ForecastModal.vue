@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import GroupedNote from './GroupedNote.vue'
 import axios from 'axios'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -254,6 +255,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
+          <GroupedNote v-if="forecast && !dataMissing" :grouped="forecast.grouped" :mode="forecast.mode" />
           <!-- Pie: ritmo usado -->
           <p v-if="forecast && !dataMissing" class="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-white/40">
             <span>A tu ritmo: <span class="text-amber-200/70">{{ paceLabel }}</span></span>

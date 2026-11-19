@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { Content, ContentType, GamePlatform, Review } from '@/api/types'
 import RatingStars from './RatingStars.vue'
 import BackdropLayer from './BackdropLayer.vue'
+import { franchisesApi } from '@/api/franchises'
+import type { Franchise } from '@/api/types'
 import WatchlistButton from '@/components/watchlists/WatchlistButton.vue'
 
 const props = withDefaults(
@@ -19,6 +21,21 @@ const emit = defineEmits<{
   'edit-mine': []
 }>()
 const router = useRouter()
+
+// Franquicias a las que pertenece el título ("Parte de Scooby-Doo").
+const franchises = ref<Franchise[]>([])
+watch(
+  () => props.content.slug,
+  async (slug) => {
+    franchises.value = []
+    try {
+      franchises.value = await franchisesApi.forContent(slug)
+    } catch {
+      // Es un extra: si falla, simplemente no mostramos la etiqueta.
+    }
+  },
+  { immediate: true }
+)
 
 const TYPE_LABEL: Record<ContentType, string> = {
   movie: 'Película',
@@ -218,6 +235,25 @@ function goBack() {
               <span class="text-white/30">·</span>
               <span>{{ reviewCountLabel }}</span>
             </span>
+          </div>
+
+          <div v-if="franchises.length" class="flex flex-wrap gap-2 fade-up" style="animation-delay: 270ms">
+            <RouterLink
+              v-for="f in franchises"
+              :key="f.id"
+              :to="`/franquicias/${f.slug}`"
+              class="group/fr inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-3.5 py-1.5 text-xs font-medium text-amber-200 backdrop-blur-sm transition-colors hover:bg-amber-400/20"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                <rect x="2" y="7" width="20" height="14" rx="2" />
+                <path d="M16 3H8M18 5H6" />
+              </svg>
+              Parte de <span class="font-semibold text-amber-100">{{ f.name }}</span>
+              <span class="text-amber-200/60">· {{ f.contentsCount }} títulos</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3 transition-transform group-hover/fr:translate-x-0.5">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </RouterLink>
           </div>
 
           <div v-if="content.genres.length" class="flex flex-wrap gap-2 fade-up" style="animation-delay: 300ms">

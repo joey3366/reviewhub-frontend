@@ -2,7 +2,7 @@
 import { backdropPosition } from '@/lib/backdrop'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { Watchlist, WatchlistItem } from '@/api/types'
+import type { Franchise, Watchlist, WatchlistItem } from '@/api/types'
 import { watchlistsApi } from '@/api/watchlists'
 import ItemTrackingModal from '@/components/watchlists/ItemTrackingModal.vue'
 import ForecastModal from '@/components/watchlists/ForecastModal.vue'
@@ -11,6 +11,9 @@ import RetrospectiveModal from '@/components/watchlists/RetrospectiveModal.vue'
 import IncludesManagerModal from '@/components/watchlists/IncludesManagerModal.vue'
 import ListStatsModal from '@/components/watchlists/ListStatsModal.vue'
 import ConfirmModal from '@/components/ui/ConfirmModal.vue'
+import GroupItemModal from '@/components/watchlists/GroupItemModal.vue'
+import FranchisePickerModal from '@/components/franchises/FranchisePickerModal.vue'
+import AddFranchiseToListModal from '@/components/franchises/AddFranchiseToListModal.vue'
 import { useToast } from '@/composables/useToast'
 
 const toast = useToast()
@@ -39,6 +42,30 @@ const includesOpen = ref(false)
 const statsOpen = ref(false)
 // Item pendiente de confirmación de quitar.
 const itemToRemove = ref<WatchlistItem | null>(null)
+// "Unir a…": item que se va a unir a otro. null = cerrado.
+const groupingItem = ref<WatchlistItem | null>(null)
+const groupingSaving = ref(false)
+// "+ Franquicia": elegir franquicia → modal de agregar con esta lista fija.
+const franchisePickerOpen = ref(false)
+const franchiseToAdd = ref<Franchise | null>(null)
+function onFranchisePicked(f: Franchise) {
+  franchisePickerOpen.value = false
+  franchiseToAdd.value = f
+}
+async function onFranchiseAdded(result: { added: number; skipped: number; grouped: number }) {
+  const name = franchiseToAdd.value?.name ?? 'la franquicia'
+  franchiseToAdd.value = null
+  const parts = [`${result.added} de ${name} agregados`]
+  if (result.skipped) parts.push(`${result.skipped} ya estaban`)
+  if (result.grouped) parts.push(`${result.grouped} unidos al grupo`)
+  toast.success(parts.join(' · '))
+  if (watchlist.value) watchlist.value = await watchlistsApi.show(watchlist.value.id)
+}
+// Principales con sus unidos desplegados.
+const expandedGroups = ref(new Set<string>())
+// Renombrar grupo: id del principal en edición + borrador del nombre.
+const renamingGroupId = ref<string | null>(null)
+const groupNameDraft = ref('')
 
 // Un item es heredado si vino con `viaWatchlistId` (no es propio del watchlist).
 function isInherited(item: WatchlistItem): boolean {
@@ -92,19 +119,123 @@ watch(backdrops, () => {
 onBeforeUnmount(stopBgRotation)
 
 const itemsCountLabel = computed(() => {
-  const n = items.value.length
+  // Solo principales (lo calcula el backend): los unidos no cuentan aparte.
+  const n = watchlist.value?.itemsCount ?? items.value.length
   return `${n} ${n === 1 ? 'título' : 'títulos'}`
 })
 
 const showDuration = computed(() => (watchlist.value?.totalDurationSeconds ?? 0) > 0)
 
-// Items reordenables por drag. Mantenemos un orden local separado de
-// watchlist.items para no reiniciar el slideshow del fondo al arrastrar.
+// --- Agrupación ---
+// Un item "unido" (parentItemId) se muestra dentro de la tarjeta de su
+// principal. Si su principal no está en la vista (ej. heredado y
+// deduplicado), se muestra suelto.
+const visibleIds = computed(() => new Set(items.value.map((i) => i.id)))
+function parentOf(item: WatchlistItem): string | null {
+  return item.parentItemId && visibleIds.value.has(item.parentItemId) ? item.parentItemId : null
+}
+const childrenByParent = computed(() => {
+  const map = new Map<string, WatchlistItem[]>()
+  for (const it of items.value) {
+    const p = parentOf(it)
+    if (!p) continue
+    if (!map.has(p)) map.set(p, [])
+    map.get(p)!.push(it)
+  }
+  return map
+})
+function childrenOf(item: WatchlistItem): WatchlistItem[] {
+  return childrenByParent.value.get(item.id) ?? []
+}
+// Tiempo de la tarjeta = propio + el de sus unidos.
+function groupDuration(item: WatchlistItem): number {
+  return childrenOf(item).reduce((sum, c) => sum + c.durationSeconds, item.durationSeconds)
+}
+// Episodios de la tarjeta = propios + 1 por cada unido sin episodios
+// (película, juego) o los episodios del unido si es una serie.
+function groupEpisodes(item: WatchlistItem): number {
+  return childrenOf(item).reduce((sum, c) => sum + (c.episodesWatched ?? 1), item.episodesWatched ?? 0)
+}
+// Título de la tarjeta: el nombre del grupo si lo tiene (y tiene unidos).
+function displayTitle(item: WatchlistItem): string {
+  if (item.groupName && childrenOf(item).length > 0) return item.groupName
+  return item.content?.title ?? ''
+}
+function startRenameGroup(item: WatchlistItem) {
+  renamingGroupId.value = item.id
+  groupNameDraft.value = item.groupName ?? ''
+}
+async function saveGroupName(item: WatchlistItem) {
+  if (!watchlist.value || renamingGroupId.value !== item.id) return
+  const name = groupNameDraft.value.trim()
+  renamingGroupId.value = null
+  if (name === (item.groupName ?? '')) return
+  try {
+    await watchlistsApi.setGroupName(watchlist.value.id, item.id, name || null)
+    watchlist.value = await watchlistsApi.show(watchlist.value.id)
+    toast.success(name ? `Grupo renombrado a "${name}"` : 'Nombre del grupo quitado')
+  } catch (e) {
+    toast.error('No se pudo guardar el nombre.')
+    console.error(e)
+  }
+}
+
+function toggleGroup(item: WatchlistItem) {
+  const next = new Set(expandedGroups.value)
+  if (next.has(item.id)) next.delete(item.id)
+  else next.add(item.id)
+  expandedGroups.value = next
+}
+// Se puede unir: propio, suelto, sin unidos propios, y con algún candidato.
+function canGroup(item: WatchlistItem): boolean {
+  return (
+    !isInherited(item) &&
+    !parentOf(item) &&
+    childrenOf(item).length === 0 &&
+    groupCandidates(item).length > 0
+  )
+}
+function groupCandidates(item: WatchlistItem): WatchlistItem[] {
+  return orderedItems.value.filter((c) => c.id !== item.id && !isInherited(c))
+}
+async function pickGroupParent(parentItemId: string) {
+  const item = groupingItem.value
+  if (!watchlist.value || !item) return
+  groupingSaving.value = true
+  try {
+    await watchlistsApi.setItemParent(watchlist.value.id, item.id, parentItemId)
+    const parent = items.value.find((i) => i.id === parentItemId)
+    watchlist.value = await watchlistsApi.show(watchlist.value.id)
+    expandedGroups.value = new Set(expandedGroups.value).add(parentItemId)
+    toast.success(`"${item.content?.title}" unido a "${parent?.content?.title ?? 'otro título'}"`)
+    groupingItem.value = null
+  } catch (e: any) {
+    toast.error(e?.response?.data?.message ?? 'No se pudo unir.')
+    console.error(e)
+  } finally {
+    groupingSaving.value = false
+  }
+}
+async function ungroup(item: WatchlistItem) {
+  if (!watchlist.value) return
+  try {
+    await watchlistsApi.setItemParent(watchlist.value.id, item.id, null)
+    watchlist.value = await watchlistsApi.show(watchlist.value.id)
+    toast.success(`"${item.content?.title}" separado`)
+  } catch (e) {
+    toast.error('No se pudo separar.')
+    console.error(e)
+  }
+}
+
+// Items reordenables por drag: solo los principales (los unidos viajan con
+// su principal). Orden local separado de watchlist.items para no reiniciar
+// el slideshow del fondo al arrastrar.
 const orderedItems = ref<WatchlistItem[]>([])
 watch(
   () => watchlist.value?.items,
   (its) => {
-    orderedItems.value = its ? [...its] : []
+    orderedItems.value = its ? its.filter((it) => !parentOf(it)) : []
   },
   { immediate: true }
 )
@@ -131,7 +262,9 @@ async function onItemDragEnd() {
   try {
     // Solo persistimos el orden de los propios: el backend ignora ids ajenos,
     // pero filtramos acá igual por claridad.
-    const ownIds = orderedItems.value.filter((it) => !isInherited(it)).map((it) => it.id)
+    const ownIds = orderedItems.value
+      .filter((it) => !isInherited(it))
+      .flatMap((it) => [it.id, ...childrenOf(it).map((c) => c.id)])
     await watchlistsApi.reorderItems(watchlist.value.id, ownIds)
   } catch (e) {
     toast.error('No se pudo guardar el orden.')
@@ -364,6 +497,19 @@ watch(id, loadWatchlist, { immediate: true })
               <span class="text-xs font-medium uppercase tracking-wide text-white/50">Total visto</span>
               <span class="text-base font-bold tabular-nums text-amber-300">{{ totalWatchedLabel }}</span>
             </span>
+            <!-- + Franquicia (solo dueño) -->
+            <button
+              v-if="watchlist.includedLists !== undefined"
+              type="button"
+              class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/80 transition-colors hover:border-amber-400/40 hover:bg-amber-400/[0.06] hover:text-amber-300"
+              @click="franchisePickerOpen = true"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                <rect x="2" y="7" width="20" height="14" rx="2" />
+                <path d="M16 3H8M18 5H6" />
+              </svg>
+              + Franquicia
+            </button>
             <!-- Listas incluidas (solo dueño): includedLists viene undefined si no es tuya -->
             <button
               v-if="watchlist.includedLists !== undefined"
@@ -487,25 +633,137 @@ watch(id, loadWatchlist, { immediate: true })
 
             <div class="flex flex-col gap-0.5">
               <button type="button" class="line-clamp-2 text-left text-sm font-semibold text-white transition-colors hover:text-amber-300" @click="goToContent(item)">
-                {{ item.content?.title }}
+                {{ displayTitle(item) }}
               </button>
+              <p
+                v-if="displayTitle(item) !== item.content?.title"
+                class="truncate text-[11px] text-white/45"
+                :title="item.content?.title"
+              >
+                {{ item.content?.title }}
+              </p>
               <p class="flex items-center gap-1.5 text-xs text-white/50">
                 <span>{{ typeLabel(item) }}</span>
                 <span v-if="ratingDisplay(item)" class="text-amber-300">★ {{ ratingDisplay(item) }}</span>
               </p>
+              <!-- Unidos: insignia que despliega la lista + renombrar grupo -->
+              <div v-if="childrenOf(item).length > 0" class="mt-0.5 flex items-center gap-1">
+                <button
+                  type="button"
+                  class="mt-0.5 inline-flex w-fit items-center gap-1 rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[11px] font-medium text-amber-200 transition-colors hover:bg-amber-400/20"
+                  :aria-expanded="expandedGroups.has(item.id)"
+                  @click="toggleGroup(item)"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                  </svg>
+                  +{{ childrenOf(item).length }} {{ childrenOf(item).length === 1 ? 'unido' : 'unidos' }}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3 transition-transform" :class="expandedGroups.has(item.id) && 'rotate-180'">
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+                <button
+                  v-if="!isInherited(item) && renamingGroupId !== item.id"
+                  type="button"
+                  class="flex h-5 w-5 items-center justify-center rounded-full text-white/40 transition-colors hover:bg-white/10 hover:text-amber-300"
+                  :aria-label="`Ponerle nombre al grupo de ${item.content?.title}`"
+                  title="Nombre del grupo"
+                  @click="startRenameGroup(item)"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                  </svg>
+                </button>
+              </div>
+              <input
+                v-if="renamingGroupId === item.id"
+                v-model="groupNameDraft"
+                type="text"
+                maxlength="80"
+                placeholder="Nombre del grupo (ej. Scooby-Doo)"
+                class="mt-1 h-8 w-full rounded-md border border-amber-400/40 bg-black/50 px-2 text-xs text-white placeholder:text-white/30 focus:border-amber-400 focus:outline-none"
+                autofocus
+                @keydown.enter.prevent="saveGroupName(item)"
+                @keydown.esc.prevent="renamingGroupId = null"
+                @blur="saveGroupName(item)"
+              />
+              <ul
+                v-if="childrenOf(item).length > 0 && expandedGroups.has(item.id)"
+                class="mt-1 flex flex-col gap-1.5 rounded-lg border border-white/10 bg-black/40 p-1.5 backdrop-blur-sm"
+              >
+                <li v-for="child in childrenOf(item)" :key="child.id" class="flex items-center gap-2">
+                  <button type="button" class="h-11 w-8 flex-none overflow-hidden rounded border border-white/10 bg-zinc-900" @click="goToContent(child)">
+                    <img v-if="child.content?.posterUrl" :src="child.content.posterUrl" :alt="child.content?.title" class="h-full w-full object-cover" loading="lazy" draggable="false" />
+                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="m-auto h-4 w-4 text-white/30">
+                      <rect x="2" y="2" width="20" height="20" rx="2.18" />
+                      <path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5" />
+                    </svg>
+                  </button>
+                  <div class="min-w-0 flex-1">
+                    <button type="button" class="block w-full truncate text-left text-xs font-medium text-white hover:text-amber-300" :title="child.content?.title" @click="goToContent(child)">
+                      {{ child.content?.title }}
+                    </button>
+                    <p class="text-[10px] text-white/50">
+                      {{ typeLabel(child) }}<template v-if="child.durationSeconds > 0"> · {{ fmtDuration(child.durationSeconds) }}</template>
+                    </p>
+                  </div>
+                  <template v-if="!isInherited(child)">
+                    <button
+                      type="button"
+                      class="flex h-6 w-6 flex-none items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-amber-300"
+                      :aria-label="`Editar seguimiento de ${child.content?.title}`"
+                      title="Seguimiento"
+                      @click="openTracking(child)"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M12 7v5l3 2" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="flex h-6 w-6 flex-none items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+                      :aria-label="`Separar ${child.content?.title}`"
+                      title="Separar (vuelve a ser un título aparte)"
+                      @click="ungroup(child)"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                        <path d="m18.84 12.25 1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                        <path d="m5.17 11.75-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                        <path d="M8 2v3M2 8h3M16 22v-3M22 16h-3" />
+                      </svg>
+                    </button>
+                  </template>
+                </li>
+              </ul>
+              <!-- Unir a… -->
+              <button
+                v-if="canGroup(item)"
+                type="button"
+                class="mt-0.5 inline-flex w-fit items-center gap-1 text-[11px] font-medium text-white/40 transition-all hover:text-amber-300 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:opacity-0"
+                @click="groupingItem = item"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                </svg>
+                Unir a…
+              </button>
               <!-- Seguimiento cargado -->
               <p
-                v-if="hasTracking(item)"
+                v-if="hasTracking(item) || groupDuration(item) > 0"
                 class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-amber-200/60"
               >
-                <span v-if="item.durationSeconds > 0" class="inline-flex items-center gap-1">
+                <span v-if="groupDuration(item) > 0" class="inline-flex items-center gap-1">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
                     <circle cx="12" cy="12" r="9" />
                     <path d="M12 7v5l3 2" />
                   </svg>
-                  {{ fmtDuration(item.durationSeconds) }}
+                  {{ fmtDuration(groupDuration(item)) }}
                 </span>
-                <span v-if="(item.episodesWatched ?? 0) > 0">{{ item.episodesWatched }} ep</span>
+                <span v-if="(item.episodesWatched ?? 0) > 0">{{ groupEpisodes(item) }} ep</span>
                 <span v-if="item.daysElapsed != null" class="inline-flex items-center gap-1">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3 w-3">
                     <rect x="3" y="4" width="18" height="18" rx="2" />
@@ -623,6 +881,30 @@ watch(id, loadWatchlist, { immediate: true })
       :watchlist-id="watchlist?.id ?? ''"
       :watchlist-name="watchlist?.name ?? ''"
       @close="statsOpen = false"
+    />
+
+    <FranchisePickerModal
+      :open="franchisePickerOpen"
+      @close="franchisePickerOpen = false"
+      @pick="onFranchisePicked"
+    />
+
+    <AddFranchiseToListModal
+      :open="franchiseToAdd !== null"
+      :franchise="franchiseToAdd"
+      :fixed-list-id="watchlist?.id ?? null"
+      default-mode="all"
+      @close="franchiseToAdd = null"
+      @done="onFranchiseAdded"
+    />
+
+    <GroupItemModal
+      :open="groupingItem !== null"
+      :item="groupingItem"
+      :candidates="groupingItem ? groupCandidates(groupingItem) : []"
+      :saving="groupingSaving"
+      @close="groupingItem = null"
+      @pick="pickGroupParent"
     />
 
     <ConfirmModal

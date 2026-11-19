@@ -75,6 +75,24 @@ export const watchlistsApi = {
     return data.data
   },
 
+  /** Une `itemId` a otro item de la lista (parentItemId) o lo separa (null). */
+  setItemParent: async (watchlistId: string, itemId: string, parentItemId: string | null) => {
+    const { data } = await client.patch<{ data: WatchlistItem }>(
+      `/watchlists/${watchlistId}/items/${itemId}`,
+      { parentItemId }
+    )
+    return data.data
+  },
+
+  /** Nombre del grupo de un principal ("" / null = sin nombre). */
+  setGroupName: async (watchlistId: string, itemId: string, groupName: string | null) => {
+    const { data } = await client.patch<{ data: WatchlistItem }>(
+      `/watchlists/${watchlistId}/items/${itemId}`,
+      { groupName }
+    )
+    return data.data
+  },
+
   removeItem: async (watchlistId: string, itemId: string) => {
     await client.delete(`/watchlists/${watchlistId}/items/${itemId}`)
   },
