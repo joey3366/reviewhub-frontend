@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import axios from 'axios'
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
 import type { Content, ContentType, Paginated } from '@/api/types'
 import { contentApi } from '@/api/content'
 import { adminApi } from '@/api/admin'
@@ -12,11 +12,26 @@ import { useToast } from '@/composables/useToast'
 const toast = useToast()
 
 const router = useRouter()
+const route = useRoute()
 
-const page = ref(1)
+// Página, búsqueda y tipo viven también en la URL (?page=&q=&type=): así,
+// al volver de editar un título, la lista queda donde estabas.
+const TYPES: ContentType[] = ['movie', 'series', 'game']
+const qType = route.query.type as string | undefined
+const page = ref(Math.max(1, Number(route.query.page) || 1))
 const perPage = 20
-const q = ref('')
-const typeFilter = ref<'all' | ContentType>('all')
+const q = ref((route.query.q as string | undefined) ?? '')
+const typeFilter = ref<'all' | ContentType>(TYPES.includes(qType as ContentType) ? (qType as ContentType) : 'all')
+
+function syncQuery() {
+  router.replace({
+    query: {
+      ...(page.value > 1 && { page: String(page.value) }),
+      ...(q.value.trim() && { q: q.value.trim() }),
+      ...(typeFilter.value !== 'all' && { type: typeFilter.value }),
+    },
+  })
+}
 
 const TYPE_NOUN_FEM: Record<ContentType, string> = {
   movie: 'esta película',
@@ -44,6 +59,7 @@ const items = computed(() => data.value?.data ?? [])
 const meta = computed(() => data.value?.metadata ?? null)
 
 async function load() {
+  syncQuery()
   loading.value = true
   error.value = null
   try {
@@ -130,6 +146,13 @@ load()
             Crear, editar y eliminar películas y series del catálogo.
           </p>
         </div>
+        <div class="flex flex-wrap gap-2">
+        <RouterLink
+          to="/admin/franchises"
+          class="inline-flex h-11 items-center gap-2 rounded-full border border-white/15 px-5 text-sm font-medium text-white/80 transition-colors hover:bg-white/10"
+        >
+          Franquicias
+        </RouterLink>
         <button
           type="button"
           class="inline-flex h-11 items-center gap-2 rounded-full bg-amber-400 px-5 text-sm font-semibold text-black shadow-lg shadow-amber-500/20 transition-colors hover:bg-amber-300"
@@ -140,6 +163,7 @@ load()
           </svg>
           Crear contenido
         </button>
+        </div>
       </header>
 
       <!-- Filtros -->
@@ -209,7 +233,7 @@ load()
             <tr v-for="c in items" :key="c.id" class="transition-colors hover:bg-white/[0.04]">
               <td class="px-4 py-3">
                 <div class="flex items-center gap-3">
-                  <div class="h-12 w-8 shrink-0 overflow-hidden rounded border border-white/10 bg-black/40">
+                  <RouterLink :to="`/contents/${c.slug}`" class="h-12 w-8 shrink-0 overflow-hidden rounded border border-white/10 bg-black/40" :title="`Ver ${c.title}`">
                     <img
                       v-if="c.posterUrl"
                       :src="c.posterUrl"
@@ -217,9 +241,9 @@ load()
                       loading="lazy"
                       class="h-full w-full object-cover"
                     />
-                  </div>
+                  </RouterLink>
                   <div class="min-w-0">
-                    <p class="truncate font-medium text-white">{{ c.title }}</p>
+                    <RouterLink :to="`/contents/${c.slug}`" class="block truncate font-medium text-white transition-colors hover:text-amber-300">{{ c.title }}</RouterLink>
                     <p v-if="c.originalTitle && c.originalTitle !== c.title" class="truncate text-xs text-white/40">
                       {{ c.originalTitle }}
                     </p>
@@ -241,6 +265,12 @@ load()
               </td>
               <td class="px-4 py-3 text-right">
                 <div class="inline-flex items-center gap-1">
+                  <RouterLink
+                    :to="`/contents/${c.slug}`"
+                    class="rounded-md px-2 py-1 text-xs font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                  >
+                    Ver
+                  </RouterLink>
                   <button
                     type="button"
                     class="rounded-md px-2 py-1 text-xs font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white"

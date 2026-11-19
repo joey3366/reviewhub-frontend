@@ -313,16 +313,17 @@ async function submit() {
       }
     }
     if (isEdit.value) {
-      // En edit nos quedamos en la página: aplicamos lo que devolvió el
-      // backend al form (importa cuando el backend normaliza algo, ej. el
-      // country en mayúsculas) y avisamos con un toast.
+      // En edit volvemos al listado (donde estabas: misma página/filtros).
+      // Antes aplicamos lo que devolvió el backend por si el usuario vuelve
+      // con "atrás" del navegador.
       applyContentToForm(saved)
       toast.success('Cambios guardados')
+      goBackToList()
     } else {
       // En create sí redirigimos al listado: ahí se ve el nuevo contenido en
       // su contexto y la admin puede seguir agregando o editando otros.
       toast.success('Contenido creado')
-      router.push({ name: 'admin-contents' })
+      goBackToList()
     }
   } catch (e) {
     if (axios.isAxiosError(e)) {
@@ -444,8 +445,19 @@ function buildCreateGamePayload(base: {
   return out
 }
 
+// Vuelve al listado del admin. Si venías de ahí, respeta su página,
+// búsqueda y filtro (vue-router guarda la ruta anterior en history.state.back).
+function goBackToList() {
+  const back = window.history.state?.back as string | undefined
+  if (back && back.startsWith('/admin/contents') && !back.includes('/edit') && !back.endsWith('/new')) {
+    router.push(back)
+  } else {
+    router.push({ name: 'admin-contents' })
+  }
+}
+
 function cancel() {
-  router.push({ name: 'admin-contents' })
+  goBackToList()
 }
 
 // Si la serie no está "finalizada", no tiene sentido tener fecha de último aire:
