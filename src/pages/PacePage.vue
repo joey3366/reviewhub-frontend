@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DateField from '@/components/ui/DateField.vue'
 import axios from 'axios'
 import { computed, onMounted, ref } from 'vue'
 import type { Holiday, Weekday } from '@/api/types'
@@ -47,6 +48,33 @@ const newDate = ref('')
 const newHolidayName = ref('')
 const addingHoliday = ref(false)
 const removingDate = ref<string | null>(null)
+
+// Paginador por año: la lista muestra solo los días libres del año elegido.
+const selectedYear = ref<number | null>(null)
+const holidayYears = computed(() => {
+  const counts = new Map<number, number>()
+  for (const h of holidays.value) {
+    const y = Number(h.date.slice(0, 4))
+    counts.set(y, (counts.get(y) ?? 0) + 1)
+  }
+  return [...counts.entries()].sort((a, b) => a[0] - b[0]).map(([year, count]) => ({ year, count }))
+})
+// Año visible: el elegido si sigue teniendo días; si no, el actual o el más reciente.
+const activeYear = computed(() => {
+  const years = holidayYears.value.map((y) => y.year)
+  if (years.length === 0) return null
+  if (selectedYear.value !== null && years.includes(selectedYear.value)) return selectedYear.value
+  const current = new Date().getFullYear()
+  return years.includes(current) ? current : years[years.length - 1]
+})
+const yearHolidays = computed(() =>
+  activeYear.value === null ? [] : holidays.value.filter((h) => h.date.startsWith(`${activeYear.value}-`))
+)
+const activeYearIndex = computed(() => holidayYears.value.findIndex((y) => y.year === activeYear.value))
+function shiftYear(delta: number) {
+  const next = holidayYears.value[activeYearIndex.value + delta]
+  if (next) selectedYear.value = next.year
+}
 
 // Normaliza el valor de un input numérico: '' / null / NaN → null; número → número.
 function fieldValue(v: unknown): number | null {
@@ -173,6 +201,7 @@ async function addHoliday() {
       name: newHolidayName.value.trim() || undefined,
     })
     holidays.value = [...holidays.value, h].sort((a, b) => a.date.localeCompare(b.date))
+    selectedYear.value = Number(h.date.slice(0, 4))
     newDate.value = ''
     newHolidayName.value = ''
     toast.success(h.name ? `Día libre agregado: ${h.name}` : 'Día libre agregado')
@@ -332,11 +361,7 @@ onMounted(loadAll)
           <form class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end" @submit.prevent="addHoliday">
             <label class="flex flex-col gap-1.5">
               <span class="text-sm font-medium text-white">Fecha</span>
-              <input
-                v-model="newDate"
-                type="date"
-                class="h-11 rounded-md border border-white/15 bg-white/[0.04] px-3 text-sm text-white [color-scheme:dark] focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"
-              />
+              <DateField v-model="newDate" variant="dark" placeholder="Elegir fecha" aria-label="Fecha del día libre" />
             </label>
             <label class="flex flex-1 flex-col gap-1.5">
               <span class="text-sm font-medium text-white">Nombre <span class="text-white/40">(opcional)</span></span>
@@ -358,31 +383,75 @@ onMounted(loadAll)
             </button>
           </form>
 
-          <!-- Lista de días libres -->
-          <ul v-if="holidays.length > 0" class="mt-5 divide-y divide-white/5 overflow-hidden rounded-xl border border-white/10">
-            <li
-              v-for="h in holidays"
-              :key="h.date"
-              class="flex items-center justify-between gap-3 bg-white/[0.02] px-4 py-3"
-            >
-              <div class="flex flex-col">
-                <span class="text-sm font-medium text-white">{{ formatHoliday(h.date) }}</span>
-                <span v-if="h.name" class="text-xs text-amber-300/70">{{ h.name }}</span>
+          <!-- Lista de días libres, paginada por año -->
+          <div v-if="holidays.length > 0" class="mt-5 flex flex-col gap-3">
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                class="flex h-8 w-8 flex-none items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-25"
+                :disabled="activeYearIndex <= 0"
+                aria-label="Año anterior"
+                @click="shiftYear(-1)"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="m15 18-6-6 6-6" /></svg>
+              </button>
+              <div class="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none]" role="tablist" aria-label="Años">
+                <button
+                  v-for="y in holidayYears"
+                  :key="y.year"
+                  type="button"
+                  role="tab"
+                  :aria-selected="y.year === activeYear"
+                  class="inline-flex flex-none items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium tabular-nums transition-colors"
+                  :class="
+                    y.year === activeYear
+                      ? 'border-amber-400/60 bg-amber-400 text-black'
+                      : 'border-white/10 bg-white/[0.03] text-white/70 hover:border-amber-400/30 hover:text-white'
+                  "
+                  @click="selectedYear = y.year"
+                >
+                  {{ y.year }}
+                  <span class="rounded-full px-1.5 text-[11px]" :class="y.year === activeYear ? 'bg-black/15' : 'bg-white/10 text-white/50'">
+                    {{ y.count }}
+                  </span>
+                </button>
               </div>
               <button
                 type="button"
-                class="flex h-8 w-8 items-center justify-center rounded-full text-white/50 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-40"
-                :aria-label="`Borrar ${h.name ?? h.date}`"
-                :disabled="removingDate === h.date"
-                @click="removeHoliday(h.date)"
+                class="flex h-8 w-8 flex-none items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-25"
+                :disabled="activeYearIndex >= holidayYears.length - 1"
+                aria-label="Año siguiente"
+                @click="shiftYear(1)"
               >
-                <span v-if="removingDate === h.date" class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-                  <path d="M18 6 6 18M6 6l12 12" />
-                </svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="m9 18 6-6-6-6" /></svg>
               </button>
-            </li>
-          </ul>
+            </div>
+
+            <ul class="grid gap-2 sm:grid-cols-2" role="tabpanel">
+              <li
+                v-for="h in yearHolidays"
+                :key="h.date"
+                class="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.02] px-3.5 py-2.5"
+              >
+                <div class="flex min-w-0 flex-col">
+                  <span class="text-sm font-medium text-white">{{ formatHoliday(h.date) }}</span>
+                  <span v-if="h.name" class="truncate text-xs text-amber-300/70" :title="h.name">{{ h.name }}</span>
+                </div>
+                <button
+                  type="button"
+                  class="flex h-7 w-7 flex-none items-center justify-center rounded-full text-white/40 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-40"
+                  :aria-label="`Borrar ${h.name ?? h.date}`"
+                  :disabled="removingDate === h.date"
+                  @click="removeHoliday(h.date)"
+                >
+                  <span v-if="removingDate === h.date" class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </li>
+            </ul>
+          </div>
           <p v-else class="mt-5 rounded-xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-white/40">
             Todavía no agregaste días libres.
           </p>

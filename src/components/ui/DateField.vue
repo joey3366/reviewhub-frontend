@@ -208,7 +208,7 @@ const styles = computed(() => {
         'border-white/15 bg-white/[0.04] text-white hover:border-amber-400/60 focus:border-amber-400 focus:ring-amber-400 [color-scheme:dark]',
       triggerEmpty: 'text-white/40',
       icon: 'text-amber-300/80',
-      popover: 'border-amber-400/20 bg-neutral-950/98 text-white shadow-2xl shadow-black/70',
+      popover: 'border-amber-400/25 bg-neutral-950 text-white shadow-2xl shadow-black/70',
       headerBtn: 'text-white/60 hover:bg-white/10 hover:text-white',
       headerLabel: 'text-white hover:text-amber-300',
       dow: 'text-white/40',
@@ -281,7 +281,7 @@ const styles = computed(() => {
         ref="popoverRef"
         role="dialog"
         aria-label="Calendario"
-        class="absolute left-0 top-full z-30 mt-2 w-72 origin-top overflow-hidden rounded-xl border backdrop-blur-sm"
+        class="absolute left-0 top-full z-50 mt-2 w-72 origin-top overflow-hidden rounded-xl border backdrop-blur-sm"
         :class="styles.popover"
       >
         <!-- Header -->
